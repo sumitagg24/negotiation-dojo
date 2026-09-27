@@ -12,13 +12,25 @@ import { backendWsUrl } from "./config.js";
 
 export function createSessionSocket(wsPath, handlers = {}) {
   const ws = new WebSocket(`${backendWsUrl()}${wsPath}`);
+  let pingInterval = null;
 
   const call = (name, payload) => {
     const handler = handlers[name];
     if (typeof handler === "function") handler(payload);
   };
 
-  ws.onopen = () => call("onOpen");
+  ws.onopen = () => {
+    pingInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify({ type: "ping" }));
+        } catch {
+          /* ignore */
+        }
+      }
+    }, 15000);
+    call("onOpen");
+  };
 
   ws.onmessage = (event) => {
     let msg;
@@ -62,6 +74,7 @@ export function createSessionSocket(wsPath, handlers = {}) {
   };
 
   ws.onclose = (event) => {
+    if (pingInterval) clearInterval(pingInterval);
     if (event.wasClean) return;
     // Otherwise the live screen would sit there looking alive while nothing works.
     call("onError", {
@@ -80,6 +93,9 @@ export function createSessionSocket(wsPath, handlers = {}) {
     endSession: () => {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "end_session" }));
     },
-    close: () => ws.close(),
+    close: () => {
+      if (pingInterval) clearInterval(pingInterval);
+      ws.close();
+    },
   };
 }

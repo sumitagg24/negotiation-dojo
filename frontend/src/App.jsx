@@ -95,7 +95,12 @@ export default function App() {
           <span className="brand__mark">Negotiation</span>
           <span className="brand__name">Dojo</span>
         </div>
-        {screen === "live" && <span className="mono-label">Recorder open</span>}
+        {screen === "live" && (
+          <div className="header-recorder-badge" title="Audio flight recorder is actively logging">
+            <span className="live__rec-dot" aria-hidden="true" />
+            <span>RECORDER ACTIVE</span>
+          </div>
+        )}
         {screen === "scorecard" && (
           <div className="header-actions">
             <button

@@ -14,32 +14,46 @@ const TAG_LABELS = {
   other: "Move",
 };
 
+import { useState } from "react";
+
 function formatMoney(value) {
   return `$${Number(value).toLocaleString("en-US")}`;
 }
 
 export default function MoveTimeline({ moves }) {
+  const [expandedIndex, setExpandedIndex] = useState(null);
+
   return (
     <div className="timeline">
       {moves.length === 0 && (
         <p className="timeline__empty">The moves Alex logs will appear here as you negotiate.</p>
       )}
 
-      {moves.map((move, index) => (
-        <div className="timeline__item" key={move.id || `${move.move_type}-${index}`}>
-          <div className="timeline__meta">
-            <span className={`tag tag--${move.move_type || "other"}`}>
-              {TAG_LABELS[move.move_type] || "Move"}
-            </span>
-            {typeof move.number_mentioned === "number" && (
-              <span className="timeline__number">{formatMoney(move.number_mentioned)}</span>
-            )}
+      {moves.map((move, index) => {
+        const isExpanded = expandedIndex === index;
+        return (
+          <div
+            className={`timeline__item ${isExpanded ? "timeline__item--expanded" : ""}`}
+            key={move.id || `${move.move_type}-${index}`}
+            onClick={() => setExpandedIndex(isExpanded ? null : index)}
+            role="button"
+            tabIndex={0}
+            title={isExpanded ? "Click to collapse quote" : "Click to view full quote"}
+          >
+            <div className="timeline__meta">
+              <span className={`tag tag--${move.move_type || "other"}`}>
+                {TAG_LABELS[move.move_type] || "Move"}
+              </span>
+              {typeof move.number_mentioned === "number" && (
+                <span className="timeline__number">{formatMoney(move.number_mentioned)}</span>
+              )}
+            </div>
+            <div className={`timeline__quote ${isExpanded ? "timeline__quote--expanded" : ""}`}>
+              "{move.quote}"
+            </div>
           </div>
-          <div className="timeline__quote" title={move.quote}>
-            "{move.quote}"
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

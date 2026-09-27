@@ -151,6 +151,17 @@ button {
   color: var(--ink-faint);
 }
 
+.header-recorder-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-machine);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--foil);
+}
+
 /* ============================================================== stamps */
 
 .stamp {
@@ -948,6 +959,56 @@ button {
   border-bottom: 1px solid rgba(168, 167, 159, 0.14);
 }
 
+.btn-mic-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--charcoal-3);
+  border: 1px solid rgba(168, 167, 159, 0.35);
+  color: var(--rail-ink);
+  font-family: var(--font-machine);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  cursor: pointer;
+  border-radius: 0;
+  transition: all 120ms ease;
+}
+
+.btn-mic-toggle:hover {
+  background: #38342a;
+  border-color: var(--rail-ink);
+}
+
+.btn-mic-toggle--active {
+  color: var(--amber-ink);
+  border-color: rgba(224, 159, 62, 0.45);
+}
+
+.btn-mic-toggle--muted {
+  background: rgba(184, 51, 42, 0.18);
+  border-color: var(--danger-paint);
+  color: #ff8b80;
+}
+
+.mic-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.mic-dot--active {
+  background: #22c55e;
+  box-shadow: 0 0 5px rgba(34, 197, 94, 0.6);
+  animation: pulse-live 1.8s ease-in-out infinite;
+}
+
+.mic-dot--muted {
+  background: var(--danger-paint);
+}
+
 /* voice log: typed transcript */
 .transcript {
   display: flex;
@@ -1034,6 +1095,18 @@ button {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.timeline__item:hover {
+  border-color: var(--foil);
+  background: #2c2720;
+}
+
+.timeline__item--expanded {
+  border-color: var(--orange);
+  background: #2c2720;
 }
 
 .timeline__meta {
@@ -1068,6 +1141,13 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.timeline__quote--expanded {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: unset !important;
+  color: #dfdbcf;
 }
 
 /* telemetry strip */

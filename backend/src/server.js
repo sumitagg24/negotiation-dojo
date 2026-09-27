@@ -495,6 +495,8 @@ function attachClient(runtime, ws) {
   }
 
   ws.on("message", (raw) => {
+    ws.isAlive = true;
+    ws.missedPings = 0;
     let msg;
     try {
       msg = JSON.parse(raw.toString());
@@ -547,8 +549,13 @@ function attachClient(runtime, ws) {
 const wsHeartbeatInterval = setInterval(() => {
   wss.clients.forEach((ws) => {
     if (ws.isAlive === false) {
-      console.log("[server] terminating inactive websocket client");
-      return ws.terminate();
+      ws.missedPings = (ws.missedPings || 0) + 1;
+      if (ws.missedPings >= 3) {
+        console.log("[server] terminating inactive websocket client after 3 missed cycles");
+        return ws.terminate();
+      }
+    } else {
+      ws.missedPings = 0;
     }
     ws.isAlive = false;
     try {

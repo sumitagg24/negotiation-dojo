@@ -38,6 +38,7 @@ export default function LiveSessionScreen({ sessionId, wsPath, onSessionEnd, onB
   const [micDenied, setMicDenied] = useState(false);
   const [banner, setBanner] = useState(null);
   const [elapsed, setElapsed] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
 
   const socketRef = useRef(null);
   const engineRef = useRef(null);
@@ -47,6 +48,15 @@ export default function LiveSessionScreen({ sessionId, wsPath, onSessionEnd, onB
   const finishRef = useRef(() => {});
   const traceApiRef = useRef(null);
   const elapsedRef = useRef(0);
+  const isMutedRef = useRef(false);
+
+  const toggleMute = useCallback(() => {
+    setIsMuted((prev) => {
+      const next = !prev;
+      isMutedRef.current = next;
+      return next;
+    });
+  }, []);
 
   // Recording clock: the strip and the exceedance flags are timestamped
   // against this, so the report can cite "00:47" and mean something.
@@ -143,8 +153,10 @@ export default function LiveSessionScreen({ sessionId, wsPath, onSessionEnd, onB
         // The same 50 ms chunk goes to the strip (measured) and the backend
         // (scored): one microphone, two records.
         await engine.startCapture((base64) => {
-          traceApiRef.current?.pushAudio(base64);
-          socket.sendAudioChunk(base64);
+          if (!isMutedRef.current) {
+            traceApiRef.current?.pushAudio(base64);
+            socket.sendAudioChunk(base64);
+          }
         });
         if (!cancelled) setStatus((current) => (current === "connecting" ? "live" : current));
       } catch (err) {
@@ -266,7 +278,19 @@ export default function LiveSessionScreen({ sessionId, wsPath, onSessionEnd, onB
         <div className="live__col">
           <div className="live__colhead">
             <span>Voice log — typed record</span>
-            <span>{status === "live" ? "Open mic" : status.toUpperCase()}</span>
+            {status === "live" ? (
+              <button
+                type="button"
+                className={`btn-mic-toggle ${isMuted ? "btn-mic-toggle--muted" : "btn-mic-toggle--active"}`}
+                onClick={toggleMute}
+                title={isMuted ? "Microphone is muted. Click to open mic and speak." : "Microphone is active. Click to mute."}
+              >
+                <span className={`mic-dot ${isMuted ? "mic-dot--muted" : "mic-dot--active"}`} aria-hidden="true" />
+                <span>{isMuted ? "Mic Muted" : "Open Mic"}</span>
+              </button>
+            ) : (
+              <span>{status.toUpperCase()}</span>
+            )}
           </div>
           <div className="transcript">
             <LiveTranscript segments={renderSegments} />
@@ -313,9 +337,9 @@ export default function LiveSessionScreen({ sessionId, wsPath, onSessionEnd, onB
       {/* --------------------------------------------------------- footer */}
       <div className="live__footer">
         <div className="live__status">
-          <span className={`dot${status === "live" ? " dot--live" : ""}`} aria-hidden="true" />
+          <span className={`dot${status === "live" && !isMuted ? " dot--live" : ""}`} aria-hidden="true" />
           {status === "connecting" && "Handshaking with the agent"}
-          {status === "live" && "Live — speak naturally"}
+          {status === "live" && (isMuted ? "Mic muted — click 'Mic Muted' above to speak" : "Live — speak naturally")}
           {status === "ending" && "Recorder stopped — reading back the record"}
           {status === "failed" && "Scoring failed — you can retry"}
         </div>
