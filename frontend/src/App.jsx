@@ -40,7 +40,7 @@ const SAMPLE_SCORECARD = {
 export default function App() {
   const queryScreen = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("screen") : null;
   const [screen, setScreen] = useState(queryScreen === "live" || queryScreen === "scorecard" ? queryScreen : "setup");
-  const [session, setSession] = useState(queryScreen === "live" ? { sessionId: "sess_demo1234", wsPath: "ws://localhost:8080/ws" } : null);
+  const [session, setSession] = useState(queryScreen === "live" ? { sessionId: "sess_demo1234", wsPath: "/ws/session/sess_demo1234" } : null);
   const [scorecard, setScorecard] = useState(queryScreen === "scorecard" ? SAMPLE_SCORECARD : null);
   const [headerCopied, setHeaderCopied] = useState(false);
   const [headerDownloaded, setHeaderDownloaded] = useState(false);

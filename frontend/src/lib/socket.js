@@ -11,7 +11,10 @@
 import { backendWsUrl } from "./config.js";
 
 export function createSessionSocket(wsPath, handlers = {}) {
-  const ws = new WebSocket(`${backendWsUrl()}${wsPath}`);
+  const url = wsPath?.startsWith("ws://") || wsPath?.startsWith("wss://")
+    ? wsPath
+    : `${backendWsUrl()}${wsPath?.startsWith("/") ? "" : "/"}${wsPath || ""}`;
+  const ws = new WebSocket(url);
   let pingInterval = null;
 
   const call = (name, payload) => {
