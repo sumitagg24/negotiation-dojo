@@ -13,6 +13,9 @@
  * only as stamp FILL; stamp text/borders are Ribbon Ink (contrast on paper).
  */
 
+import { useState, useCallback } from "react";
+import { copyScorecardText } from "../lib/scorecardCopy.js";
+
 const TELL_PARAMS = {
   hesitation: "PAUSE DURATION",
   retraction: "UTTERANCE REVISION",
@@ -70,6 +73,14 @@ function ParameterRuler({ label, ratio, reached }) {
 }
 
 export default function ScorecardScreen({ scorecard, onTryAgain }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    copyScorecardText(scorecard).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [scorecard]);
+
   if (!scorecard) {
     return (
       <div className="dossier-wrap">
@@ -107,7 +118,7 @@ export default function ScorecardScreen({ scorecard, onTryAgain }) {
           <span className="folder__seal-text">RECORDED DATA · REVIEW COPY · RECORDED DATA</span>
         </div>
 
-        <div className="dossier__sheet">
+        <div className="dossier__sheet" id="operator-review">
           {/* 1. Document head + verdict ----------------------------------- */}
           <header className="doc-head">
             <div>
@@ -283,9 +294,14 @@ export default function ScorecardScreen({ scorecard, onTryAgain }) {
 
         <div className="dossier__footer">
           <span className="mono-label">End of report · recorder retains full audio parameters</span>
-          <button className="btn" type="button" onClick={onTryAgain}>
-            New recording
-          </button>
+          <div className="dossier__footer-actions">
+            <button className="btn btn--ghost" type="button" onClick={handleCopy}>
+              {copied ? "Copied to clipboard!" : "Copy report"}
+            </button>
+            <button className="btn" type="button" onClick={onTryAgain}>
+              New recording
+            </button>
+          </div>
         </div>
       </div>
     </div>

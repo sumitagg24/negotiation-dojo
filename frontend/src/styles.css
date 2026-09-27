@@ -1308,6 +1308,106 @@ button {
     padding-left: 14px;
     padding-right: 14px;
   }
+
+  .dossier__footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    margin: 24px 14px 0;
+  }
+
+  .dossier__footer-actions {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .dossier__footer-actions .btn {
+    flex: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .xtable {
+    display: block;
+    width: 100%;
+  }
+
+  .xtable thead {
+    display: none;
+  }
+
+  .xtable tbody,
+  .xtable tr {
+    display: block;
+    width: 100%;
+  }
+
+  .xtable tr {
+    padding: 10px 0;
+    border-bottom: 1px dotted var(--ink-soft);
+  }
+
+  .xtable td {
+    display: block;
+    width: 100% !important;
+    padding: 3px 0;
+    border-bottom: none;
+  }
+
+  .xtable td:first-child {
+    display: inline-block;
+    width: auto !important;
+    margin-right: 6px;
+    font-weight: 700;
+  }
+
+  .xtable td:nth-child(2) {
+    display: inline-block;
+    width: auto !important;
+  }
+
+  .xtable td:nth-child(3) {
+    margin: 4px 0 2px;
+  }
+
+  .xtable td:nth-child(4) {
+    margin-top: 2px;
+  }
+}
+
+/* Header buttons for review and copy */
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-header {
+  font-family: var(--font-machine);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--ink-soft);
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.btn-header:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.btn-header--copy {
+  background: rgba(38, 37, 31, 0.06);
+}
+
+.btn-header--copy:hover {
+  background: var(--ink);
+  color: var(--paper);
 }
 
 /* ============================================================== reduced motion */
