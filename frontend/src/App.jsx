@@ -3,7 +3,7 @@ import { useCallback, useState } from "react";
 import SetupScreen from "./screens/SetupScreen.jsx";
 import LiveSessionScreen from "./screens/LiveSessionScreen.jsx";
 import ScorecardScreen from "./screens/ScorecardScreen.jsx";
-import { copyScorecardText } from "./lib/scorecardCopy.js";
+import { copyScorecardText, downloadScorecardReport } from "./lib/scorecardCopy.js";
 
 /**
  * Spec C.1 -- three states only. No routing library; a single useState deciding
@@ -43,6 +43,7 @@ export default function App() {
   const [session, setSession] = useState(queryScreen === "live" ? { sessionId: "sess_demo1234", wsPath: "ws://localhost:8080/ws" } : null);
   const [scorecard, setScorecard] = useState(queryScreen === "scorecard" ? SAMPLE_SCORECARD : null);
   const [headerCopied, setHeaderCopied] = useState(false);
+  const [headerDownloaded, setHeaderDownloaded] = useState(false);
 
   const handleSessionStart = useCallback((sessionId, wsPath) => {
     setSession({ sessionId, wsPath });
@@ -64,10 +65,18 @@ export default function App() {
   }, []);
 
   const handleHeaderCopy = useCallback(() => {
-    copyScorecardText(scorecard).catch(() => {});
+    copyScorecardText(scorecard, session?.sessionId).catch(() => {});
     setHeaderCopied(true);
     setTimeout(() => setHeaderCopied(false), 2000);
-  }, [scorecard]);
+  }, [scorecard, session?.sessionId]);
+
+  const handleHeaderDownload = useCallback(() => {
+    const ok = downloadScorecardReport(scorecard, session?.sessionId);
+    if (ok) {
+      setHeaderDownloaded(true);
+      setTimeout(() => setHeaderDownloaded(false), 2000);
+    }
+  }, [scorecard, session?.sessionId]);
 
   const handleScrollToReview = useCallback(() => {
     const el = document.getElementById("operator-review") || document.querySelector(".dossier__sheet");
@@ -105,6 +114,14 @@ export default function App() {
             >
               {headerCopied ? "Copied!" : "Copy"}
             </button>
+            <button
+              type="button"
+              className="btn-header btn-header--download"
+              onClick={handleHeaderDownload}
+              title="Download dossier report"
+            >
+              {headerDownloaded ? "Downloaded!" : "Download"}
+            </button>
           </div>
         )}
       </header>
@@ -119,7 +136,13 @@ export default function App() {
             onBackToSetup={handleTryAgain}
           />
         )}
-        {screen === "scorecard" && <ScorecardScreen scorecard={scorecard} onTryAgain={handleTryAgain} />}
+        {screen === "scorecard" && (
+          <ScorecardScreen
+            scorecard={scorecard}
+            sessionId={session?.sessionId}
+            onTryAgain={handleTryAgain}
+          />
+        )}
       </div>
     </div>
   );

@@ -14,7 +14,7 @@
  */
 
 import { useState, useCallback } from "react";
-import { copyScorecardText } from "../lib/scorecardCopy.js";
+import { copyScorecardText, downloadScorecardReport } from "../lib/scorecardCopy.js";
 
 const TELL_PARAMS = {
   hesitation: "PAUSE DURATION",
@@ -72,14 +72,23 @@ function ParameterRuler({ label, ratio, reached }) {
   );
 }
 
-export default function ScorecardScreen({ scorecard, onTryAgain }) {
+export default function ScorecardScreen({ scorecard, sessionId, onTryAgain }) {
   const [copied, setCopied] = useState(false);
+  const [downloaded, setDownloaded] = useState(false);
 
   const handleCopy = useCallback(() => {
-    copyScorecardText(scorecard).catch(() => {});
+    copyScorecardText(scorecard, sessionId).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, [scorecard]);
+  }, [scorecard, sessionId]);
+
+  const handleDownload = useCallback(() => {
+    const ok = downloadScorecardReport(scorecard, sessionId);
+    if (ok) {
+      setDownloaded(true);
+      setTimeout(() => setDownloaded(false), 2000);
+    }
+  }, [scorecard, sessionId]);
 
   if (!scorecard) {
     return (
@@ -297,6 +306,9 @@ export default function ScorecardScreen({ scorecard, onTryAgain }) {
           <div className="dossier__footer-actions">
             <button className="btn btn--ghost" type="button" onClick={handleCopy}>
               {copied ? "Copied to clipboard!" : "Copy report"}
+            </button>
+            <button className="btn btn--ghost" type="button" onClick={handleDownload}>
+              {downloaded ? "Report downloaded!" : "Download report"}
             </button>
             <button className="btn" type="button" onClick={onTryAgain}>
               New recording
