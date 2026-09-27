@@ -236,32 +236,34 @@ export default function ScorecardScreen({ scorecard, sessionId, onTryAgain }) {
                 parameter — that is exactly the goal.
               </div>
             ) : (
-              <table className="xtable">
-                <thead>
-                  <tr>
-                    <th>Ex</th>
-                    <th>Parameter</th>
-                    <th>As spoken</th>
-                    <th>Finding</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tells.map((tell, index) => (
-                    <tr key={`tell-${index}`}>
-                      <td className="xtable__code">{String.fromCharCode(65 + index)}</td>
-                      <td className="xtable__param">{TELL_PARAMS[tell.type] || (tell.type || "").toUpperCase()}</td>
-                      <td className="xtable__spoken">
-                        {tell.quote ? (
-                          <MarkedQuote text={tell.quote} />
-                        ) : (
-                          <span className="doc-section__note">—</span>
-                        )}
-                      </td>
-                      <td className="xtable__note">{tell.note}</td>
+              <div className="xtable-wrap">
+                <table className="xtable">
+                  <thead>
+                    <tr>
+                      <th className="xtable__th-code">Ex</th>
+                      <th className="xtable__th-param">Parameter</th>
+                      <th>As spoken</th>
+                      <th>Finding</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {tells.map((tell, index) => (
+                      <tr key={`tell-${index}`}>
+                        <td className="xtable__code">{String.fromCharCode(65 + index)}</td>
+                        <td className="xtable__param">{TELL_PARAMS[tell.type] || (tell.type || "").toUpperCase()}</td>
+                        <td className="xtable__spoken">
+                          {tell.quote ? (
+                            <MarkedQuote text={tell.quote} />
+                          ) : (
+                            <span className="doc-section__note">—</span>
+                          )}
+                        </td>
+                        <td className="xtable__note">{tell.note}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </section>
 
