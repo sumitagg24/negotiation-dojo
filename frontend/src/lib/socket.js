@@ -8,9 +8,10 @@
  * Spec: negotiation_dojo_full_spec.md section C.6
  */
 
+import { backendWsUrl } from "./config.js";
+
 export function createSessionSocket(wsPath, handlers = {}) {
-  const wsBase = import.meta.env.VITE_BACKEND_WS_URL || "ws://localhost:8080";
-  const ws = new WebSocket(`${wsBase}${wsPath}`);
+  const ws = new WebSocket(`${backendWsUrl()}${wsPath}`);
 
   const call = (name, payload) => {
     const handler = handlers[name];

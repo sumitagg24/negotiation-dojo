@@ -1,0 +1,51 @@
+# Render Blueprint for the Negotiation Dojo backend.
+#
+# Render reads this when you choose New -> Blueprint and point it at this repo.
+# Everything except the AssemblyAI key is configured here, so there is nothing to
+# fill in by hand afterwards.
+#
+# The backend MUST be hosted somewhere that keeps a process alive: the browser
+# holds a long-lived WebSocket to it for the whole negotiation. Vercel's
+# serverless functions cannot do this, which is why the backend lives here and
+# only the frontend lives on Vercel.
+#
+# NOTE ON THE FREE PLAN: free instances spin down after ~15 minutes of inactivity
+# and take 30-60s to cold start, and they have a monthly hour cap. A cold start
+# during a live voice demo is fatal, so for demo day switch `plan` to `starter`
+# (or keep the service warm by pinging /api/health every few minutes).
+
+services:
+  - type: web
+    name: negotiation-dojo-backend
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+
+    envVars:
+      # sync: false tells Render to prompt for this value in the dashboard and
+      # keep it out of git entirely. Paste the real key there, never here.
+      - key: ASSEMBLYAI_API_KEY
+        sync: false
+
+      # Do NOT set PORT: Render injects it and server.js already honours it.
+
+      - key: NODE_ENV
+        value: production
+
+      # Comma-separated. The frontend answers on several Vercel hosts, so all of
+      # them are listed; the wildcard covers per-preview deployment URLs.
+      - key: CORS_ORIGIN
+        value: http://localhost:5173,https://negotiation-dojo-one.vercel.app,https://negotiation-dojo-sumitagg24s-projects.vercel.app,https://*.vercel.app
+
+      - key: SESSION_STORE_PATH
+        value: ./data/sessions.json
+
+      # Word-level tell detection. Set to "false" to run without the second
+      # AssemblyAI leg if you hit rate or capacity limits during the demo.
+      - key: ENABLE_TELL_STT_LEG
+        value: "true"

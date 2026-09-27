@@ -1,11 +1,13 @@
 import { useState } from "react";
 
+import { backendUrl } from "../lib/config.js";
+
 /**
  * Spec C.2 -- one form, four fields, one button.
  * Part F: a failed connection must show an inline error with a Retry button and
  * must NOT transition to the live screen.
  */
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8080";
+
 
 export default function SetupScreen({ onSessionStart }) {
   const [target, setTarget] = useState("");
@@ -39,7 +41,7 @@ export default function SetupScreen({ onSessionStart }) {
     setServerError(null);
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/session/start`, {
+      const response = await fetch(`${backendUrl()}/api/session/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -60,7 +62,7 @@ export default function SetupScreen({ onSessionStart }) {
       onSessionStart(data.sessionId, data.wsPath);
     } catch (err) {
       setServerError(
-        `Could not reach the backend at ${BACKEND_URL}. Is it running? (${err.message})`,
+        `Could not reach the backend at ${backendUrl()}. Is it running? (${err.message})`,
       );
     } finally {
       setSubmitting(false);

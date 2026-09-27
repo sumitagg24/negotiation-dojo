@@ -27,13 +27,72 @@ const parsedPort = Number.parseInt(process.env.PORT ?? "", 10);
 const PORT = Number.isFinite(parsedPort) && parsedPort > 0 ? parsedPort : 8080;
 const CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173";
 
+/**
+ * CORS_ORIGIN accepts a COMMA-SEPARATED list, because one frontend is served from
+ * several hosts at once: local dev, the production Vercel alias, its per-branch
+ * alias, and a brand new unique URL for every preview deployment. A single string
+ * silently breaks all but one of them, and the browser reports it as a generic
+ * network failure rather than a CORS rejection.
+ *
+ * Each entry is an exact origin ("https://app.vercel.app") or a wildcard subdomain
+ * pattern ("https://*.vercel.app"). Use "*" to allow everything.
+ */
+function buildOriginMatcher(raw) {
+  const entries = String(raw)
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  const exact = new Set();
+  const wildcards = [];
+  let allowAll = false;
+
+  for (const entry of entries) {
+    if (entry === "*") {
+      allowAll = true;
+      continue;
+    }
+    const wildcard = entry.match(/^(https?:\/\/)\*\.(.+)$/);
+    if (wildcard) wildcards.push({ scheme: wildcard[1], suffix: wildcard[2] });
+    else exact.add(entry);
+  }
+
+  return {
+    allowed: entries,
+    test(origin) {
+      if (!origin) return true; // curl, Render health checks, same-origin requests
+      if (allowAll) return true;
+      if (exact.has(origin)) return true;
+      return wildcards.some(({ scheme, suffix }) => {
+        if (!origin.startsWith(scheme)) return false;
+        const host = origin.slice(scheme.length);
+        return host === suffix || host.endsWith(`.${suffix}`);
+      });
+    },
+  };
+}
+
+const originMatcher = buildOriginMatcher(CORS_ORIGIN);
+
 /** How long a session may sit with no browser attached before we stop billing. */
 const IDLE_ABANDON_MS = 2 * 60 * 1000;
 /** Cap on agent audio buffered while the browser is still connecting. */
 const MAX_PENDING_AGENT_AUDIO = 600;
 
 const app = express();
-app.use(cors({ origin: CORS_ORIGIN }));
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (originMatcher.test(origin)) return callback(null, true);
+      // Deny by omitting the CORS headers (the browser surfaces a normal CORS
+      // error) but log the precise cause, because the allowed list is the fix.
+      console.warn(
+        `[cors] blocked origin "${origin}". CORS_ORIGIN allows: ${originMatcher.allowed.join(", ")}`,
+      );
+      callback(null, false);
+    },
+  }),
+);
 app.use(express.json({ limit: "1mb" }));
 
 const llmClient = createLlmClient();

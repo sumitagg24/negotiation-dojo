@@ -14,6 +14,9 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Runtime config. Loaded before the app module so the backend urls are
+         available on first render. Served unbundled from public/config.js. -->
+    <script src="/config.js"></script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

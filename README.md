@@ -144,6 +144,66 @@ mock. Everything either side of it is tested.
 
 ---
 
+## Deployment
+
+Two hosts, because the backend must keep a process alive: the browser holds a long-lived WebSocket
+to it for the whole negotiation, and Vercel's serverless functions cannot do that. Frontend on
+Vercel, backend on Render (or Railway / Fly.io).
+
+### 1. Backend → Render
+
+`render.yaml` in the repo root is a Render Blueprint: root directory, build and start commands,
+health-check path and every non-secret env var are already configured.
+
+1. Render dashboard → **New** → **Blueprint** → pick this repo.
+2. Render reads `render.yaml` and prompts for **`ASSEMBLYAI_API_KEY`** (declared `sync: false`, so its
+   value is never stored in git). Paste your key.
+3. Deploy, then confirm `GET /api/health` returns `{"status":"ok"}` over HTTPS.
+
+Your backend URL is then `https://<service>.onrender.com`, with `wss://` for the WebSocket.
+
+> **Free plan warning.** Free instances spin down after ~15 minutes idle and take 30–60s to cold
+> start, with a monthly hour cap. A cold start mid-demo looks like a hang. Switch `plan:` in
+> `render.yaml` to `starter` for demo day, or ping `/api/health` every few minutes to keep it warm.
+
+### 2. Point the frontend at it
+
+The Vercel project (`negotiation-dojo`) already auto-deploys on every push to `main`. Choose one:
+
+- **Edit `frontend/public/config.js`** — recommended: no dashboard access and no build flags.
+  ```js
+  window.__NEGOTIATION_DOJO__ = {
+    backendUrl: "https://<your-service>.onrender.com",
+    backendWsUrl: "wss://<your-service>.onrender.com",
+  };
+  ```
+- Or set `VITE_BACKEND_URL` / `VITE_BACKEND_WS_URL` in the Vercel project's environment variables and
+  redeploy. These are inlined at build time, so a change needs a rebuild.
+
+`frontend/public/config.js` wins if both are set. Note the protocol changes when deployed:
+`https://` for REST and `wss://` for the WebSocket, both on the same host.
+
+### 3. CORS
+
+`CORS_ORIGIN` accepts a **comma-separated list**, and each entry can be an exact origin or a wildcard
+subdomain pattern (`https://*.vercel.app`). One frontend is served from several hosts at once — local
+dev, the production alias, the per-branch alias, and a fresh unique URL for every preview deployment
+— so a single origin string silently breaks all but one of them, and the browser reports it as a
+generic network failure rather than a CORS rejection. A rejected origin logs its own fix:
+
+```
+[cors] blocked origin "https://evil.example.com". CORS_ORIGIN allows: http://localhost:5173, https://*.vercel.app
+```
+
+### Deployment checklist
+
+- [ ] `GET /api/health` returns 200 over HTTPS on the backend
+- [ ] `frontend/public/config.js` (or the Vercel env vars) points at that backend
+- [ ] Open the Vercel URL in an incognito window, allow the mic, complete one full session
+- [ ] `CORS_ORIGIN` includes the exact Vercel URL being submitted
+
+---
+
 ## Deviations from the original spec
 
 `negotiation_dojo_full_spec.md` told us to confirm the AssemblyAI contracts against the live docs and

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { backendUrl } from "../lib/config.js";
 import { createSessionSocket } from "../lib/socket.js";
 import { createAudioEngine } from "../lib/audio.js";
 import LiveTranscript from "../components/LiveTranscript.jsx";
@@ -11,7 +12,7 @@ import MoveTimeline from "../components/MoveTimeline.jsx";
  * Covers part F rows: mic permission denied, connection lost mid-session,
  * scoring failure with a retry, and empty sessions.
  */
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8080";
+
 
 /** If the socket path never produces a scorecard, fall back to REST. */
 const REST_SCORING_FALLBACK_MS = 5000;
@@ -121,7 +122,7 @@ export default function LiveSessionScreen({ sessionId, wsPath, onSessionEnd, onB
   // ------------------------------------------------------------------ actions
   async function scoreViaRest() {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/session/${sessionId}/end`, { method: "POST" });
+      const response = await fetch(`${backendUrl()}/api/session/${sessionId}/end`, { method: "POST" });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.scorecard) {
         throw new Error(data.message || `HTTP ${response.status}`);
@@ -159,7 +160,7 @@ export default function LiveSessionScreen({ sessionId, wsPath, onSessionEnd, onB
   function handleBackToSetup() {
     // Stop billing for a session the user is abandoning before it ever began.
     if (sessionId) {
-      fetch(`${BACKEND_URL}/api/session/${sessionId}/end`, { method: "POST" }).catch(() => {});
+      fetch(`${backendUrl()}/api/session/${sessionId}/end`, { method: "POST" }).catch(() => {});
     }
     onBackToSetup?.();
   }
