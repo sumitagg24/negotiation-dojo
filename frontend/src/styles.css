@@ -151,7 +151,9 @@ button {
   color: var(--ink-faint);
 }
 
-.header-recorder-badge {
+/* ================================= status labels (non-interactive) */
+
+.status-label {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -159,7 +161,53 @@ button {
   font-size: 11px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+  color: var(--rail-dim);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+  cursor: default;
+  user-select: none;
+  pointer-events: none;
+}
+
+.status-label--header {
   color: var(--foil);
+}
+
+.status-label--mic {
+  color: var(--rail-dim);
+}
+
+.status-label__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.status-label__dot--header {
+  background: var(--teal-ink);
+  box-shadow: 0 0 4px rgba(94, 158, 156, 0.45);
+}
+
+.status-label__dot--live {
+  background: #22c55e;
+  box-shadow: 0 0 5px rgba(34, 197, 94, 0.55);
+  animation: pulse-live 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse-live {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
 }
 
 /* ============================================================== stamps */
@@ -1013,56 +1061,20 @@ button {
   text-transform: uppercase;
   color: var(--rail-dim);
   border-bottom: 1px solid rgba(168, 167, 159, 0.14);
+  background: transparent;
+  cursor: default;
+  user-select: none;
 }
 
-.btn-mic-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--charcoal-3);
-  border: 1px solid rgba(168, 167, 159, 0.35);
+.live__colhead-title {
   color: var(--rail-ink);
-  font-family: var(--font-machine);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  padding: 3px 8px;
-  cursor: pointer;
-  border-radius: 0;
-  transition: all 120ms ease;
-}
-
-.btn-mic-toggle:hover {
-  background: #38342a;
-  border-color: var(--rail-ink);
-}
-
-.btn-mic-toggle--active {
-  color: var(--amber-ink);
-  border-color: rgba(224, 159, 62, 0.45);
-}
-
-.btn-mic-toggle--muted {
-  background: rgba(184, 51, 42, 0.18);
-  border-color: var(--danger-paint);
-  color: #ff8b80;
-}
-
-.mic-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  display: inline-block;
-}
-
-.mic-dot--active {
-  background: #22c55e;
-  box-shadow: 0 0 5px rgba(34, 197, 94, 0.6);
-  animation: pulse-live 1.8s ease-in-out infinite;
-}
-
-.mic-dot--muted {
-  background: var(--danger-paint);
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  cursor: default;
+  user-select: none;
+  pointer-events: none;
+  border: none;
+  background: transparent;
 }
 
 /* voice log: typed transcript */
@@ -1151,18 +1163,8 @@ button {
   display: flex;
   flex-direction: column;
   gap: 5px;
-  cursor: pointer;
-  transition: border-color 120ms ease, background 120ms ease;
-}
-
-.timeline__item:hover {
-  border-color: var(--foil);
-  background: #2c2720;
-}
-
-.timeline__item--expanded {
-  border-color: var(--orange);
-  background: #2c2720;
+  cursor: default;
+  user-select: none;
 }
 
 .timeline__meta {
@@ -1197,13 +1199,6 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.timeline__quote--expanded {
-  white-space: normal !important;
-  overflow: visible !important;
-  text-overflow: unset !important;
-  color: #dfdbcf;
 }
 
 /* telemetry strip */

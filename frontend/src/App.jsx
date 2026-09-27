@@ -96,9 +96,9 @@ export default function App() {
           <span className="brand__name">Dojo</span>
         </div>
         {screen === "live" && (
-          <div className="header-recorder-badge" title="Audio flight recorder is actively logging">
-            <span className="live__rec-dot" aria-hidden="true" />
-            <span>RECORDER ACTIVE</span>
+          <div className="status-label status-label--header" aria-label="Recorder open">
+            <span className="status-label__dot status-label__dot--header" aria-hidden="true" />
+            <span>Recorder open</span>
           </div>
         )}
         {screen === "scorecard" && (
