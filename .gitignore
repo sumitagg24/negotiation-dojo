@@ -16,3 +16,6 @@ backend/data/
 
 # client/tool metadata, not part of the project
 .freebuff/
+.agents/
+skills-lock.json
+brag-output/

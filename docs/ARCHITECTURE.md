@@ -267,13 +267,16 @@ and nowhere else.
 
 ## 9. Test coverage
 
-`cd backend && npm test` — 48 tests, 0 failures, ~2.7 s.
+`cd backend && npm test` — 63 tests, 0 failures, ~2.8 s.
 
 | File | Tests | Covers |
 | --- | --- | --- |
 | `test/tellDetection.test.js` | 17 | Number parsing, all four detectors firing and staying silent, the orchestrator, baseline stats. Acceptance row 4 |
 | `test/scoreSession.test.js` | 23 | Weighted formula, determinism, LLM-authority rule, malformed-JSON retry, fallback narrative, empty sessions, prompt integrity, store baseline |
-| `test/voiceAgentSession.test.js` | 7 | Mock-AssemblyAI integration: handshake payload, transcript mapping, tool round trip, barge-in, word-level turns reaching the detectors, teardown |
+| `test/voiceAgentSession.test.js` | 14 | Mock-AssemblyAI integration: handshake payload, transcript mapping, tool round trip, rapid sequential barge-in protection with reply-keyed map, word-level turns reaching detectors, teardown |
+| `test/keepAlive.test.js` | 6 | Anti-spin-down cron keepalive execution, exponential backoff, health endpoint validation, disabled/standby guards |
+| `test/traceMarkers.test.mjs` | 2 | Client-side visual pen trace alignment and detector event mapping |
 | `test/fullStack.test.js` | 1 | The real `server.js` over real HTTP + WebSocket against a mock AssemblyAI: start, audio, move, tell, score, retrieve; plus the LLM-authority rule and unknown-session refusal |
 
 Unverified: the real speech-to-speech audio round trip, which requires a live API key.
+

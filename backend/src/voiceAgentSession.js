@@ -124,7 +124,6 @@ class VoiceAgentSession {
           // The Voice Agent API ignores unknown types; a ping frame keeps the
           // TCP connection alive without affecting the conversation state.
           this.agentWs.ping();
-          console.log(`[diag:agent-keepalive ${this.sessionId}] sent WS ping to AAI agent leg @ ${new Date().toISOString()}`);
         } catch (err) {
           console.warn(`[diag:agent-keepalive ${this.sessionId}] ping failed: ${err.message}`);
         }
@@ -138,7 +137,6 @@ class VoiceAgentSession {
       if (this.sttWs && this.sttWs.readyState === WebSocket.OPEN) {
         try {
           this.sttWs.ping();
-          console.log(`[diag:stt-keepalive ${this.sessionId}] sent WS ping to AAI STT leg @ ${new Date().toISOString()}`);
         } catch (err) {
           console.warn(`[diag:stt-keepalive ${this.sessionId}] ping failed: ${err.message}`);
         }
@@ -219,9 +217,7 @@ class VoiceAgentSession {
 
     ws.on("message", (raw) => this._handleAgentEvent(raw));
 
-    ws.on("pong", () => {
-      console.log(`[diag:agent-pong ${this.sessionId}] received pong from AAI agent leg @ ${new Date().toISOString()}`);
-    });
+    ws.on("pong", () => {});
 
     ws.on("error", (err) => {
       const message = `Voice agent connection error: ${err.message}`;
@@ -347,7 +343,6 @@ class VoiceAgentSession {
             call_id: event.call_id,
             result: JSON.stringify({ ok: true }),
           });
-          console.log(`[diag:tool-call ${this.sessionId}] queued result for call_id=${event.call_id} reply_id=${replyId}`);
         }
         break;
       }
@@ -355,7 +350,6 @@ class VoiceAgentSession {
       case "reply.started":
         this._pendingReply = true;
         this._currentReplyId = event.reply_id || "__default__";
-        console.log(`[diag:agent-event ${this.sessionId}] reply.started reply_id=${event.reply_id || "—"} @ ${new Date().toISOString()}`);
         this.agentPartialByReply.set(event.reply_id, "");
         break;
 
@@ -492,9 +486,7 @@ class VoiceAgentSession {
       console.log(`[diag:stt-open ${this.sessionId}] Streaming STT WS opened @ ${new Date().toISOString()}`);
     });
 
-    ws.on("pong", () => {
-      console.log(`[diag:stt-pong ${this.sessionId}] received pong from STT leg @ ${new Date().toISOString()}`);
-    });
+    ws.on("pong", () => {});
 
     ws.on("error", (err) => {
       console.error(`[diag:stt-error ${this.sessionId}] ${err.message} @ ${new Date().toISOString()}`);

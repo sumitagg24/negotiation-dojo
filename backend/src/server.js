@@ -410,11 +410,6 @@ app.post("/api/session/:id/end", async (req, res, next) => {
   }
 });
 
-app.get("/api/session/:id", (req, res) => {
-  const session = sessionStore.getSession(req.params.id);
-  if (!session) return res.status(404).json({ error: "unknown_session" });
-  res.json({ session });
-});
 
 app.get("/api/session/:id/scorecard", (req, res) => {
   const scorecard = sessionStore.getScorecard(req.params.id);
@@ -477,7 +472,6 @@ function attachClient(runtime, ws) {
     // pong from frontend resets the 3-cycle miss counter (already done by messages,
     // but RFC 6455 pong fires separately)
     ws.missedPings = 0;
-    console.log(`[diag:fe-pong ${runtime.sessionId}] received RFC 6455 pong from browser @ ${new Date().toISOString()}`);
   });
 
   if (runtime.idleTimer) {
@@ -516,7 +510,6 @@ function attachClient(runtime, ws) {
 
     switch (msg.type) {
       case "ping":
-        console.log(`[diag:fe-ping ${runtime.sessionId}] app-level ping from browser @ ${new Date().toISOString()}`);
         return send({ type: "pong", timestamp: Date.now() });
 
       case "audio_chunk":
@@ -575,7 +568,6 @@ const wsHeartbeatInterval = setInterval(() => {
     ws.isAlive = false;
     try {
       ws.ping();
-      // console.log(`[diag:heartbeat] sent RFC 6455 ping to browser @ ${new Date().toISOString()}`);
     } catch {
       /* ignore */
     }

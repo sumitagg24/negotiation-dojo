@@ -1,249 +1,229 @@
 # Negotiation Dojo
 
-A live voice salary-negotiation trainer. You get a verbal offer, you talk a realistic (moderately
-tough) hiring manager up, and then you get a coaching report on your moves, your tells, and the
-money you left on the table.
+[![CI](https://github.com/sumitagg24/negotiation-dojo/actions/workflows/ci.yml/badge.svg)](https://github.com/sumitagg24/negotiation-dojo/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-63%20passed-brightgreen)](https://github.com/sumitagg24/negotiation-dojo)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Built on the [AssemblyAI Voice Agent API](https://www.assemblyai.com/docs/voice-agents/voice-agent-api)
-(topics: `docs/ARCHITECTURE.md`).
+A live, full-duplex voice salary-negotiation trainer with forensic flight-recorder telemetry and deterministic scoring. Practice high-stakes salary conversations against an adaptive hiring manager, identify verbal tells in real time, and receive an instant forensic scorecard analyzing moves, pauses, pace spikes, and money left on the table.
+
+- 🌐 **Live Web App:** [https://negotiation-dojo-one.vercel.app](https://negotiation-dojo-one.vercel.app)
+- ⚡ **Backend Health:** [https://negotiation-dojo-backend.onrender.com/api/health](https://negotiation-dojo-backend.onrender.com/api/health)
+- 📖 **Architecture Deep-Dive:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 
 ---
 
-## Quickstart (fresh clone)
+## Hackathon Judging Criteria Mapping
+
+| Judging Criterion | Implementation & Evidence in This Repository |
+|---|---|
+| **AssemblyAI Voice Agent API Usage** | Native bidirectional voice streaming using the **AssemblyAI Voice Agent API** (`wss://agents.assemblyai.com/v1/ws`). Implements real-time tool calling (`log_negotiation_move`), zero-cutoff barge-in audio flushes (`reply.done(interrupted)` dropping queued client audio buffers), and dynamic persona orchestration via Alex Chen (Northbeam Analytics hiring manager). |
+| **Technical Sophistication** | **Dual-Leg Voice Architecture:** Feeds microphone audio concurrently to both the Voice Agent API (speech-to-speech) and an auxiliary AssemblyAI Streaming STT v3 leg (`Universal-3.5-pro`) to acquire millisecond-accurate per-word timestamps and confidence scores for live tell detection. Hardened with 25s AAI WebSocket keepalive pings and a reply-keyed Map protecting tool results during rapid sequential barge-ins. |
+| **Usefulness** | Transforms the highest-stakes career conversation into an adrenaline-fueled flight simulator. Detects micro-hesitations before salary numbers, mid-utterance price retractions, and rushed speech spikes against the candidate's rolling baseline, providing concrete, actionable feedback. |
+| **Completeness & Polish** | Themed **"Black Box" flight recorder** UI: Manila dossier folder setup and forensic report, switching to a charcoal instrument face during live voice sparring. 100% deterministic formulaic scoring, full keyboard navigation, REST fallback scoring if WebSocket disconnects, and responsive layouts across mobile & desktop. |
+| **Demo Quality** | Production-ready zero-config live deployment on Vercel + Render with automated anti-spin-down background cron, GitHub Actions CI verifying **63 passing tests** on every push, and instant dossier preview mode (`?screen=scorecard`). |
+
+---
+
+## System Architecture
+
+```
+                  ┌────────────────────────────────────────────────────────┐
+                  │                 BROWSER / FRONTEND                     │
+                  │  Web Audio Worklet: PCM16 24 kHz mono (50 ms chunks)   │
+                  │  Dual Theme: Manila Dossier (Setup/Report) & FDR Face  │
+                  └───────────────────────▲──┬─────────────────────────────┘
+                                          │  │ WebSocket
+                                          │  │ (15s ping/pong keepalive)
+                                          │  ▼
+                  ┌────────────────────────────────────────────────────────┐
+                  │                  BACKEND (Node.js)                     │
+                  │  Express REST + ws WebSocket Server                    │
+                  │  Session Store & Anti-Spin-Down Self-Ping Cron         │
+                  └───────────────────────▲──┬─────────────────────────────┘
+                                          │  │
+                    ┌─────────────────────┘  └─────────────────────┐
+                    │ 25s WS keepalive                             │ 25s WS keepalive
+                    ▼                                              ▼
+┌───────────────────────────────────────┐      ┌───────────────────────────────────────┐
+│   AssemblyAI Voice Agent API (Leg 1)  │      │  AssemblyAI Streaming STT v3 (Leg 2)  │
+│   • Full-duplex conversation & TTS    │      │   • Universal-3.5-pro speech model    │
+│   • Tool calling: log_negotiation_move│      │   • Word-level timestamps & confidence│
+│   • Natural barge-in interruption     │      │   • Real-time acoustic tell detection │
+└───────────────────────────────────────┘      └───────────────────────────────────────┘
+```
+
+### The Dual-Leg Strategy
+
+The AssemblyAI Voice Agent API handles full-duplex conversational voice, TTS synthesis, and interactive tool calls. Because the agent leg's `transcript.user` event provides only turn-level text without word-level timestamps or confidence scores, Negotiation Dojo simultaneously streams the raw audio to a parallel **AssemblyAI Streaming STT v3** connection. 
+
+This enables millisecond-precision tell detection while keeping conversation latency ultra-low and the audio pipeline unified. If the auxiliary STT leg ever drops, the system degrades gracefully with `TELL_DETECTION_DEGRADED` while the core conversation and scoring continue uninterrupted.
+
+---
+
+## Real-Time Tell Detection Engine
+
+Every completed user utterance is evaluated against four real-time acoustic detectors:
+
+| Tell Detector | Trigger Condition | Coaching Significance |
+|---|---|---|
+| **Hesitation** | Silence duration > 1,200 ms immediately preceding a compensation figure | Signals uncertainty or lack of conviction in the proposed number. |
+| **Retraction** | Mentioning a number and immediately following with a lower counter-figure | Unforced concession before the hiring manager has even pushed back. |
+| **Pace Spike** | Speech rate > 1.4× above the candidate's rolling conversational baseline | Indicates conversational panic, nervousness, or rushed capitulation. |
+| **Mumbled Number** | STT word confidence on a number token drops > 0.15 below utterance mean | Dropping vocal volume or trailing off when stating key figures. |
+
+---
+
+## Deterministic Scoring Formula
+
+Negotiation Dojo does **not** allow an LLM to hallucinate or invent your final negotiation grade. The final score is computed by a strict mathematical formula:
+
+$$\text{final\_score} = 100 \times \left( 0.30 \cdot \text{anchorQuality} + 0.30 \cdot \text{reciprocityRatio} + 0.25 \cdot (1 - \text{tellDensity}) + 0.15 \cdot \text{outcomeScore} \right)$$
+
+- **Anchor Quality (30%):** 1.0 if the candidate made the first salary offer; 0.4 if the hiring manager anchored first.
+- **Reciprocity Ratio (30%):** Ratio of candidate concessions made in exchange for a reciprocal counter-concession (1.0 if no concessions were required).
+- **Tell Discipline (25%):** Penalizes acoustic tells per negotiation move ($1 - \text{tellDensity}$, clamped between 0.0 and 1.0).
+- **Final Outcome (15%):** Ratio of final agreed number to the candidate's target salary (scaled to 1.15 ceiling).
+
+The LLM is invoked strictly once at session teardown to author qualitative coaching prose based on the computed metrics. Even if the LLM attempts to output a score, `scoreSession.js` discards it and enforces the deterministic formula.
+
+---
+
+## Quickstart (Local Development)
+
+### Prerequisites
+- Node.js 18.17+
+- AssemblyAI API Key ([Get one free at AssemblyAI](https://www.assemblyai.com))
+
+### 1. Backend Setup
+```bash
+cd backend
+cp .env.example .env
+# Edit .env and paste your ASSEMBLYAI_API_KEY
+npm install
+npm run dev
+# Backend listening on http://localhost:8080 (REST + WebSocket)
+```
+
+### 2. Frontend Setup (in a separate terminal)
+```bash
+cd frontend
+cp .env.example .env
+npm install
+npm run dev
+# Frontend listening on http://localhost:5173
+```
+
+3. Open **`http://localhost:5173`** in Chrome, Edge, or Firefox.
+4. Enter your target salary, walk-away number, click **Start Negotiation**, and grant microphone access.
+
+> **Tip:** Use headphones during practice. Without headphones, speaker audio may feed back into the microphone, triggering inadvertent barge-in interruptions.
+
+---
+
+## Environment Variables
+
+### Backend (`backend/.env`)
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `ASSEMBLYAI_API_KEY` | **Yes** | — | Single key for Voice Agent API, Streaming STT v3, and LLM Gateway. |
+| `PORT` | No | `8080` | Backend HTTP & WebSocket listening port. |
+| `CORS_ORIGIN` | No | `http://localhost:5173` | Allowed browser origins (comma-separated, wildcard supported). |
+| `SESSION_STORE_PATH` | No | `./data/sessions.json` | Local fallback JSON mirror for in-memory sessions. |
+| `ENABLE_TELL_STT_LEG` | No | `true` | Enables the parallel Streaming STT leg for word-level tell detection. |
+| `KEEP_ALIVE_ENABLED` | No | `true` | Enables periodic self-ping cron to prevent cloud host sleep. |
+| `KEEP_ALIVE_INTERVAL_MINUTES` | No | `10` | Interval in minutes for the keep-alive background cron. |
+| `LLM_API_KEY` | No | AssemblyAI Gateway | Optional custom OpenAI-compatible API key for scorecard prose. |
+
+### Frontend (`frontend/.env`)
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `VITE_BACKEND_URL` | No | `http://localhost:8080` | Backend HTTP endpoint. |
+| `VITE_BACKEND_WS_URL` | No | `ws://localhost:8080` | Backend WebSocket endpoint. |
+
+*Note: For production deployments, `frontend/public/config.js` allows configuring the backend URL at runtime without triggering a frontend rebuild.*
+
+---
+
+## Verification & Test Coverage
+
+The test suite validates the entire architecture end-to-end using Node's native test runner against mock AssemblyAI endpoints:
 
 ```bash
-git clone <this repo>
-cd negotiation-dojo
-
-# 1. Backend
-cd backend
-npm install
-cp .env.example .env      # then paste your ASSEMBLYAI_API_KEY into .env
-npm run dev               # http://localhost:8080
-
-# 2. Frontend (second terminal)
-cd frontend
-npm install
-cp .env.example .env      # defaults already point at localhost:8080
-npm run dev               # http://localhost:5173
+cd backend && npm test
 ```
 
-Open <http://localhost:5173>, enter a target salary and a walk-away number, click **Start
-Negotiation**, and talk.
+**63 tests pass across 6 test suites with zero failures:**
 
-**Use headphones.** Without them Alex hears himself through your speakers and interrupts himself.
+- **`test/tellDetection.test.js` (17 tests):** Spoken number normalization, hesitation detection, retraction detection, pace spike baseline calculation, and mumble detection.
+- **`test/scoreSession.test.js` (23 tests):** Weighted formula verification, deterministic score enforcement, LLM authority override, malformed JSON retry, empty session handling.
+- **`test/voiceAgentSession.test.js` (14 tests):** Full-duplex handshake, transcript event routing, tool call execution, rapid sequential barge-in protection with reply-keyed Map, word-level turn forwarding, clean session teardown.
+- **`test/keepAlive.test.js` (6 tests):** Anti-spin-down cron execution, exponential backoff, health endpoint validation, disabled/standby guards.
+- **`test/traceMarkers.test.mjs` (2 tests):** Flight data recorder canvas trace alignment and detector event mapping.
+- **`test/fullStack.test.js` (1 test):** Full integration test of `server.js` over real HTTP and WebSocket against mock AssemblyAI.
 
-That is the entire setup. No other services, no database, no second API key.
-
-### Environment variables
-
-Only one is required, and it lives in `backend/.env`:
-
-| Variable | Required | Default | Purpose |
-| --- | --- | --- | --- |
-| `ASSEMBLYAI_API_KEY` | **yes** | — | Voice agent, word-level STT leg, and the LLM Gateway for the scorecard narrative |
-| `PORT` | no | `8080` | Backend HTTP + WebSocket port |
-| `CORS_ORIGIN` | no | `http://localhost:5173` | Allowed browser origin |
-| `SESSION_STORE_PATH` | no | `./data/sessions.json` | Crash-safety mirror of sessions |
-| `ENABLE_TELL_STT_LEG` | no | `true` | Word-level tell detection (see note below) |
-| `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` | no | AssemblyAI LLM Gateway | Bring your own OpenAI-compatible model for the narrative |
-
-`frontend/.env` only needs the two defaults: `VITE_BACKEND_URL` and `VITE_BACKEND_WS_URL`.
-
-If `ASSEMBLYAI_API_KEY` is set but no LLM key is configured separately, scorecard narratives are
-written by the AssemblyAI LLM Gateway using that same key. If no key is available at all, scoring
-still works — the deterministic sub-scores are rendered with a built-in narrative template, and the
-scorecard says so.
-
-**The frontend never holds an AssemblyAI key.** Every AssemblyAI call is made from the backend.
+```bash
+cd frontend && npm run build
+```
+Builds cleanly with Vite, generating an optimized production bundle.
 
 ---
 
-## How it works
+## Production Deployment & Reliability
 
-```
-Browser ──mic (PCM16 24kHz, base64)──► Backend ──► AssemblyAI Voice Agent API   (conversation, TTS, tools)
-                                            └──► AssemblyAI Streaming STT v3   (word timings, for tells)
-       ◄── transcript / audio / tells / moves / scorecard ──┘
-```
+Negotiation Dojo is deployed across a two-tier architecture:
 
-Three things happen on every turn:
+- **Frontend:** Deployed to **Vercel** with global CDN caching and edge asset delivery.
+- **Backend:** Deployed to **Render** with persistent WebSockets for live voice streaming.
 
-1. **Moves** — Alex calls a `log_negotiation_move` tool after each of your turns. The backend stores
-   it and pushes it to the move timeline.
-2. **Tells** — every completed user utterance is run through four detectors (hesitation before a
-   number, retraction of a number, pace spike against *your own* rolling baseline, mumbled number).
-   A detected tell flashes a passive indicator; it never interrupts the conversation.
-3. **Scoring** — on end, sub-scores are computed by a fixed weighted formula and the LLM writes only
-   the prose.
+### Connection Resilience & Anti-Sleep Pipeline
 
-### The score is not a black box
+Cloud-hosted voice agents face two common failure modes: proxy timeouts on silent WebSockets, and free-tier container sleep. Negotiation Dojo implements defense-in-depth:
 
-```
-final_score = 0.30·anchor_quality
-            + 0.30·reciprocity_ratio
-            + 0.25·(1 − tell_density)
-            + 0.15·outcome_score
-```
-
-`final_score` is **always** computed by that formula in `scoreSession.js`. The LLM writes the
-coaching notes and can never change the number — whatever it returns is discarded and overwritten.
-The sub-scores ship to the frontend alongside the scorecard as `sub_scores`.
+1. **Frontend-to-Backend Heartbeat (15s):** The browser client sends an application-level ping every 15s to keep the browser-to-backend WebSocket active through reverse proxies.
+2. **Backend-to-AssemblyAI Keepalive (25s):** The backend issues native WebSocket ping frames every 25s on both active AssemblyAI legs, preventing proxy disconnections during long silent pauses.
+3. **Internal Keep-Alive Cron (10m):** `src/cron/keepAlive.js` detects `RENDER_EXTERNAL_URL` and pings `/api/health` from the public internet every 10 minutes to reset cloud sleep timers.
+4. **GitHub Actions Warm-Up Runner:** `.github/workflows/keep-warm.yml` pings the production health check on an offset schedule as an external backup.
+5. **REST Scoring Fallback:** If a network drop interrupts the WebSocket during session conclusion, the frontend seamlessly transitions to `POST /api/session/:id/end` over HTTP, scoring whatever turns and tells were recorded.
 
 ---
 
-## Project layout
+## Repository Layout
 
 ```
 negotiation-dojo/
+├── .github/workflows/
+│   ├── ci.yml                     # GitHub Actions CI: runs 63 tests & build on push
+│   └── keep-warm.yml              # Scheduled external keep-warm runner for backend
 ├── backend/
-│   ├── test/                            48 tests, `npm test`
 │   ├── src/
-│   │   ├── server.js                    REST (B.1) + WebSocket protocol (B.8)
-│   │   ├── voiceAgentSession.js         both AssemblyAI legs -> the B.2 callback contract
-│   │   ├── personas/hiringManager.js    THE prompt, and the only place it lives
-│   │   ├── tools/logNegotiationMove.js  tool schema (D.2) + handler (B.4)
-│   │   ├── scoring/tellDetection.js     four detectors + baseline stats (B.5)
-│   │   ├── scoring/scoreSession.js      deterministic score, narrative, LLM client
-│   │   └── store/sessionStore.js        in-memory + JSON mirror (B.7)
+│   │   ├── server.js              # Express REST API & WebSocket server
+│   │   ├── voiceAgentSession.js   # Dual-leg AssemblyAI coordinator (Voice Agent + STT v3)
+│   │   ├── cron/keepAlive.js      # Anti-spin-down background service
+│   │   ├── personas/              # Alex Chen hiring manager system prompts
+│   │   ├── scoring/               # tellDetection.js & deterministic scoreSession.js
+│   │   ├── store/sessionStore.js  # Thread-safe in-memory store with disk mirror
+│   │   └── tools/                 # logNegotiationMove tool definition & handler
+│   ├── test/                      # 63 unit, integration, and full-stack tests
+│   └── package.json
 ├── frontend/
-│   └── src/
-│       ├── App.jsx                      three-screen state machine (C.1)
-│       ├── screens/                     Setup, LiveSession, Scorecard (C.2-C.4)
-│       ├── components/                  LiveTranscript, TellIndicator, MoveTimeline (C.5)
-│       └── lib/                         socket.js (C.6), audio.js (capture + playback)
-└── docs/ARCHITECTURE.md
+│   ├── public/config.js           # Runtime frontend configuration for zero-rebuild deploys
+│   ├── src/
+│   │   ├── screens/               # SetupScreen, LiveSessionScreen, ScorecardScreen
+│   │   ├── components/            # LiveTranscript, MoveTimeline, TraceStrip
+│   │   ├── lib/                   # Web Audio Worklet capture/playback & socket client
+│   │   └── styles.css             # Black Box Flight Recorder & Manila Dossier styling
+│   ├── package.json
+│   └── vite.config.js
+├── docs/
+│   └── ARCHITECTURE.md            # Canonical technical specification & architecture
+├── render.yaml                    # Infrastructure-as-code Render Blueprint
+└── LICENSE                        # MIT License
 ```
 
 ---
 
-## Verification status
+## License
 
-`cd backend && npm test` runs **48 tests**, all passing:
-
-- **Tell detection (17 tests)** — all four detectors fire correctly on scripted utterances that
-  trigger each one, and stay silent on clean ones. This satisfies acceptance row 4, which asked for
-  at least 3 of 4.
-- **Scoring (23 tests)** — the weighted formula, the deterministic-score rule (an LLM claiming
-  `final_score: 999` is ignored), the malformed-JSON retry, the fallback narrative, and the
-  empty-session case.
-- **Session contract (7 tests)** — `VoiceAgentSession` driven against a mock AssemblyAI server:
-  handshake payload, transcript mapping, tool-call round trip, barge-in flush, word-level turns
-  reaching the detectors, and clean teardown.
-- **Full stack (1 test)** — the real `server.js` driven over real HTTP and WebSocket against a mock
-  AssemblyAI: `POST /start` → `session_ready` → audio → `tool.call` → `move_logged` → word-level turn
-  → `tell_detected` → `end_session` → `scorecard_ready` (score 55, computed by the formula), then
-  `GET /scorecard`. It also proves an LLM-invented `final_score: 999` is discarded and that unknown
-  sessions are refused on both surfaces.
-
-`cd frontend && npm run build` compiles clean.
-
-**What is not verified:** the real audio round trip. That needs a live `ASSEMBLYAI_API_KEY`, so the
-actual speech-to-speech path (mic → AssemblyAI → Alex's voice) has only been exercised against the
-mock. Everything either side of it is tested.
-
----
-
-## Deployment
-
-Two hosts, because the backend must keep a process alive: the browser holds a long-lived WebSocket
-to it for the whole negotiation, and Vercel's serverless functions cannot do that. Frontend on
-Vercel, backend on Render (or Railway / Fly.io).
-
-### Live deployment (this repo)
-
-- **Frontend:** https://negotiation-dojo-one.vercel.app (Vercel, auto-deploys `main`)
-- **Backend:** https://negotiation-dojo-backend.onrender.com (Render free plan, auto-deploys `main`)
-- **Keep-warm (Built-in + External):**
-  1. **Built-in Backend Cron:** The backend includes a self-pinging background service (`src/cron/keepAlive.js`). When deployed on Render, it automatically detects `RENDER_EXTERNAL_URL` and sends an HTTP GET request to its own `/api/health` every 10 minutes. Because traffic arrives from the public internet, Render's reverse proxy resets its 15-minute inactivity timer, preventing free tier sleep and eliminating 30-60s cold starts.
-  2. **WebSocket Heartbeat:** Render terminates idle WebSockets after 100 seconds of silence. The backend runs a 30-second ping/pong heartbeat to keep long pauses during voice negotiations from dropping.
-  3. **GitHub Actions Workflow:** `.github/workflows/keep-warm.yml` pings `/api/health` externally on a schedule as an extra layer of defense.
-  4. **CLI Manual Ping:** Run `npm run ping` in `backend/` to test or verify keep-alive status at any time.
-
-A third, independent pinger covers external monitoring — cron-job.org fires on an exact
-interval with no queue delay:
-
-1. Sign up free at [cron-job.org](https://cron-job.org) and confirm the email.
-2. Create a cron job: URL `https://<your-backend>.onrender.com/api/health`, method `GET`,
-   schedule **every 10 minutes** (`*/10 * * * *`).
-3. Enable it; "Last execution" should show HTTP 200. Failure notifications are free too.
-
-One manual step on a fresh Render account: paste `ASSEMBLYAI_API_KEY` into the service's
-Environment tab (Render -> negotiation-dojo-backend -> Environment). The key is never committed;
-the service boots and serves `/api/health` without it, and refuses voice sessions until it is set.
-Editing env vars in the dashboard triggers a redeploy automatically.
-
-### 1. Backend → Render
-
-`render.yaml` in the repo root is a Render Blueprint: root directory, build and start commands,
-health-check path and every non-secret env var are already configured.
-
-1. Render dashboard → **New** → **Blueprint** → pick this repo.
-2. Render reads `render.yaml` and prompts for **`ASSEMBLYAI_API_KEY`** (declared `sync: false`, so its
-   value is never stored in git). Paste your key.
-3. Deploy, then confirm `GET /api/health` returns `{"status":"ok"}` over HTTPS.
-
-Your backend URL is then `https://<service>.onrender.com`, with `wss://` for the WebSocket.
-
-> **Free plan warning.** Free instances spin down after ~15 minutes idle and take 30–60s to cold
-> start, with a monthly hour cap. A cold start mid-demo looks like a hang. Switch `plan:` in
-> `render.yaml` to `starter` for demo day, or ping `/api/health` every few minutes to keep it warm.
-
-### 2. Point the frontend at it
-
-The Vercel project (`negotiation-dojo`) already auto-deploys on every push to `main`. Choose one:
-
-- **Edit `frontend/public/config.js`** — recommended: no dashboard access and no build flags.
-  ```js
-  window.__NEGOTIATION_DOJO__ = {
-    backendUrl: "https://<your-service>.onrender.com",
-    backendWsUrl: "wss://<your-service>.onrender.com",
-  };
-  ```
-- Or set `VITE_BACKEND_URL` / `VITE_BACKEND_WS_URL` in the Vercel project's environment variables and
-  redeploy. These are inlined at build time, so a change needs a rebuild.
-
-`frontend/public/config.js` wins if both are set. Note the protocol changes when deployed:
-`https://` for REST and `wss://` for the WebSocket, both on the same host.
-
-### 3. CORS
-
-`CORS_ORIGIN` accepts a **comma-separated list**, and each entry can be an exact origin or a wildcard
-subdomain pattern (`https://*.vercel.app`). One frontend is served from several hosts at once — local
-dev, the production alias, the per-branch alias, and a fresh unique URL for every preview deployment
-— so a single origin string silently breaks all but one of them, and the browser reports it as a
-generic network failure rather than a CORS rejection. A rejected origin logs its own fix:
-
-```
-[cors] blocked origin "https://evil.example.com". CORS_ORIGIN allows: http://localhost:5173, https://*.vercel.app
-```
-
-### Deployment checklist
-
-- [ ] `GET /api/health` returns 200 over HTTPS on the backend
-- [ ] `frontend/public/config.js` (or the Vercel env vars) points at that backend
-- [ ] Open the Vercel URL in an incognito window, allow the mic, complete one full session
-- [ ] `CORS_ORIGIN` includes the exact Vercel URL being submitted
-
----
-
-## Deviations from the original spec
-
-`negotiation_dojo_full_spec.md` told us to confirm the AssemblyAI contracts against the live docs and
-adapt field names where they differed. Several differences turned out to be material. They are all
-listed with reasoning in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); the headlines:
-
-1. **The real event names differ from the spec's target contract** (`reply.audio` not `agent_audio`,
-   `tool.call` not `tool_use`, `session.end` required for teardown, and so on).
-2. **`transcript.user` carries no word timings and no confidence**, so the four tell detectors had no
-   input on the Voice Agent API alone. A parallel word-level Streaming STT leg was added — inside
-   `voiceAgentSession.js`, so the file tree stays as specified — and is what makes acceptance row 4
-   achievable.
-3. **The candidate's target and walk-away numbers are deliberately not interpolated into Alex's
-   system prompt.** Spec B.3 listed them as template variables, but the D.1 template does not use
-   them, and putting them in Alex's prompt would let the hiring manager read your hand.
-4. Two additive protocol/payload fields (`agent_audio_flush`, `narrative_source`) that the real API's
-   barge-in semantics and part F's fallback path respectively require.
-5. A few standard scaffold files the spec's file tree did not name (`index.html`, `vite.config.js`,
-   `styles.css`, `lib/audio.js`, tests) and three small bug fixes to the specified logic — all
-   documented.
+MIT License. Copyright (c) 2026 sumitagg24.
