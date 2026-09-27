@@ -1,0 +1,22 @@
+{
+  "name": "negotiation-dojo-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend for Negotiation Dojo: proxies the AssemblyAI Voice Agent API and scores salary negotiations.",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "ws": "^8.18.0"
+  }
+}

@@ -1,0 +1,18 @@
+node_modules/
+dist/
+build/
+.DS_Store
+*.log
+npm-debug.log*
+
+# env files (only .env.example is committed)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# local session-store fallback persistence
+backend/data/
+
+# client/tool metadata, not part of the project
+.freebuff/
