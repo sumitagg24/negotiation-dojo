@@ -248,9 +248,9 @@ export default function ScorecardScreen({ scorecard, sessionId, onTryAgain }) {
                 <tbody>
                   {tells.map((tell, index) => (
                     <tr key={`tell-${index}`}>
-                      <td className="xtable__ex">{String.fromCharCode(65 + index)}</td>
-                      <td className="xtable__ex">{TELL_PARAMS[tell.type] || (tell.type || "").toUpperCase()}</td>
-                      <td>
+                      <td className="xtable__code">{String.fromCharCode(65 + index)}</td>
+                      <td className="xtable__param">{TELL_PARAMS[tell.type] || (tell.type || "").toUpperCase()}</td>
+                      <td className="xtable__spoken">
                         {tell.quote ? (
                           <MarkedQuote text={tell.quote} />
                         ) : (
@@ -277,7 +277,7 @@ export default function ScorecardScreen({ scorecard, sessionId, onTryAgain }) {
                   &ldquo;<MarkedQuote text={loss.quote} />&rdquo;
                 </p>
                 <p className="cause__factor">
-                  <strong>FINDING</strong> {loss.note}
+                  <strong>FINDING:</strong> {loss.note}
                 </p>
               </div>
             ) : (

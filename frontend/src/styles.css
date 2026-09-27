@@ -697,21 +697,25 @@ button {
   background: repeating-linear-gradient(45deg, transparent 0 3px, rgba(38, 37, 31, 0.25) 3px 5px);
 }
 
-/* exceedance table: typed rows. Fixed layout + explicit columns so a long
-   unbreakable quote cannot force the table wider than the sheet. */
+/* exceedance table: typed rows with generous column clearance */
 .xtable {
   width: 100%;
   border-collapse: collapse;
-  table-layout: fixed;
+  table-layout: auto;
   font-size: 13.5px;
 }
 
 .xtable th:nth-child(1) {
-  width: 3em;
+  width: 32px;
 }
 
 .xtable th:nth-child(2) {
-  width: 9.5em;
+  width: 165px;
+  min-width: 155px;
+}
+
+.xtable th:nth-child(3) {
+  width: 42%;
 }
 
 .xtable th:nth-child(4) {
@@ -730,21 +734,50 @@ button {
   color: var(--ink-faint);
   text-align: left;
   font-weight: 500;
-  padding: 0 12px 6px 0;
+  padding: 0 16px 6px 0;
   border-bottom: 1px solid var(--ink-soft);
 }
 
 .xtable td {
-  padding: 9px 12px 9px 0;
+  padding: 10px 16px 10px 0;
   border-bottom: 1px dotted var(--ink-soft);
   vertical-align: top;
+}
+
+.xtable th:last-child,
+.xtable td:last-child {
+  padding-right: 0;
+}
+
+.xtable__code {
+  font-family: var(--font-machine);
+  font-weight: 700;
+  color: var(--pencil-red);
+  width: 32px;
+  padding-right: 10px;
+}
+
+.xtable__param {
+  font-family: var(--font-machine);
+  font-weight: 600;
+  color: var(--pencil-red);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  line-height: 1.35;
+  width: 165px;
+  min-width: 155px;
+  padding-right: 16px;
+  word-break: normal;
+}
+
+.xtable__spoken {
+  padding-right: 18px;
 }
 
 .xtable__ex {
   font-family: var(--font-machine);
   font-weight: 600;
   color: var(--pencil-red);
-  white-space: nowrap;
 }
 
 .xtable__quote {
@@ -1493,14 +1526,16 @@ button {
     border-bottom: none;
   }
 
-  .xtable td:first-child {
+  .xtable td:first-child,
+  .xtable__code {
     display: inline-block;
     width: auto !important;
     margin-right: 6px;
     font-weight: 700;
   }
 
-  .xtable td:nth-child(2) {
+  .xtable td:nth-child(2),
+  .xtable__param {
     display: inline-block;
     width: auto !important;
   }
