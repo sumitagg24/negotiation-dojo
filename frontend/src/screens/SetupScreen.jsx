@@ -11,6 +11,19 @@ import { backendUrl } from "../lib/config.js";
  * hazard tape. Starting a session breaks the seal and opens the recorder.
  */
 
+function formatThousands(val) {
+  if (!val) return "";
+  const digits = String(val).replace(/[^\d]/g, "");
+  if (!digits) return "";
+  const normalized = digits.replace(/^0+(?=\d)/, "");
+  return normalized.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+function parseAmount(val) {
+  const digits = String(val || "").replace(/[^\d]/g, "");
+  return digits ? Number(digits) : 0;
+}
+
 export default function SetupScreen({ onSessionStart }) {
   const [target, setTarget] = useState("");
   const [walkaway, setWalkaway] = useState("");
@@ -21,17 +34,22 @@ export default function SetupScreen({ onSessionStart }) {
   const [serverError, setServerError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const targetNum = parseAmount(target);
+  const isTargetLow = targetNum > 0 && targetNum < 20000;
+
   function validate() {
     const next = {};
-    const targetValue = Number(target);
-    const walkawayValue = Number(walkaway);
+    const rawTarget = String(target).replace(/[^\d]/g, "");
+    const rawWalkaway = String(walkaway).replace(/[^\d]/g, "");
+    const targetValue = Number(rawTarget);
+    const walkawayValue = Number(rawWalkaway);
 
-    if (!target.trim()) next.target = "Enter the number you actually want.";
+    if (!rawTarget) next.target = "Enter the number you actually want.";
     else if (!Number.isFinite(targetValue) || targetValue <= 0) next.target = "Enter a salary above zero.";
 
-    if (!walkaway.trim()) next.walkaway = "Enter the number you would walk away at.";
+    if (!rawWalkaway) next.walkaway = "Enter the number you would walk away at.";
     else if (!Number.isFinite(walkawayValue) || walkawayValue <= 0) next.walkaway = "Enter a salary above zero.";
-    else if (Number.isFinite(targetValue) && walkawayValue >= targetValue) {
+    else if (Number.isFinite(targetValue) && targetValue > 0 && walkawayValue >= targetValue) {
       next.walkaway = "Your walk-away number must be below your target.";
     }
 
@@ -47,8 +65,8 @@ export default function SetupScreen({ onSessionStart }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          candidateTargetSalary: Number(target),
-          candidateWalkaway: Number(walkaway),
+          candidateTargetSalary: parseAmount(target),
+          candidateWalkaway: parseAmount(walkaway),
           companyName: companyName.trim() || undefined,
           roleTitle: roleTitle.trim() || undefined,
         }),
@@ -106,16 +124,19 @@ export default function SetupScreen({ onSessionStart }) {
                 <input
                   id="target"
                   className="field__input"
-                  type="number"
+                  type="text"
                   inputMode="numeric"
-                  min="1"
-                  placeholder="120000"
+                  placeholder="120,000"
                   value={target}
-                  onChange={(event) => setTarget(event.target.value)}
+                  onChange={(event) => setTarget(formatThousands(event.target.value))}
                   disabled={submitting}
                 />
                 {errors.target ? (
                   <p className="field__error">{errors.target}</p>
+                ) : isTargetLow ? (
+                  <p className="field__warning">
+                    Target is under $20,000 — check for a missing digit before starting. (Allowed to proceed.)
+                  </p>
                 ) : (
                   <p className="field__hint">Crew entry. Alex never sees this number.</p>
                 )}
@@ -128,12 +149,11 @@ export default function SetupScreen({ onSessionStart }) {
                 <input
                   id="walkaway"
                   className="field__input"
-                  type="number"
+                  type="text"
                   inputMode="numeric"
-                  min="1"
-                  placeholder="105000"
+                  placeholder="105,000"
                   value={walkaway}
-                  onChange={(event) => setWalkaway(event.target.value)}
+                  onChange={(event) => setWalkaway(formatThousands(event.target.value))}
                   disabled={submitting}
                 />
                 {errors.walkaway ? (

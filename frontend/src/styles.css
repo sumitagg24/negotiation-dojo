@@ -471,6 +471,13 @@ button {
   color: var(--pencil-red);
 }
 
+.field__warning {
+  margin-top: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #8c5208;
+}
+
 .field--invalid .field__input {
   border-color: var(--pencil-red);
   border-style: dashed;
