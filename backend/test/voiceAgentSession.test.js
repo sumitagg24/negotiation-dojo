@@ -188,6 +188,9 @@ test("logs a move from tool.call and answers with a JSON-string tool.result", as
   await withSession({}, async ({ mock, events }) => {
     const conn = mock.agentConnection();
 
+    // The agent always emits reply.started before tool.call in a real session.
+    conn.send({ type: "reply.started", reply_id: "r1" });
+    await wait(15);
     conn.send({
       type: "tool.call",
       call_id: "call_1",
@@ -214,10 +217,14 @@ test("logs a move from tool.call and answers with a JSON-string tool.result", as
   });
 });
 
+
 test("signals a barge-in flush and discards the interrupted reply's tool results", async () => {
   await withSession({}, async ({ mock, events }) => {
     const conn = mock.agentConnection();
 
+    // reply.started must arrive first so _currentReplyId is set
+    conn.send({ type: "reply.started", reply_id: "r2" });
+    await wait(15);
     conn.send({
       type: "tool.call",
       call_id: "call_2",
@@ -232,8 +239,103 @@ test("signals a barge-in flush and discards the interrupted reply's tool results
     assert.equal(
       conn.received.filter((m) => m.type === "tool.result").length,
       0,
-      "the agent moved on, so the pending result is discarded",
+      "the agent moved on, so the pending result for r2 is discarded",
     );
+  });
+});
+
+test("tool result for a non-interrupted reply survives a concurrent rapid barge-in", async () => {
+  await withSession({}, async ({ mock, events }) => {
+    const conn = mock.agentConnection();
+
+    // First reply starts and gets a tool call, then gets interrupted
+    conn.send({ type: "reply.started", reply_id: "r_a" });
+    await wait(15);
+    conn.send({
+      type: "tool.call",
+      call_id: "call_a",
+      name: "log_negotiation_move",
+      arguments: { move_type: "anchor", quote: "I need $110k.", rationale: "Anchored high." },
+    });
+    await wait(15);
+    // Second reply starts (overlapping, e.g. agent responded immediately)
+    conn.send({ type: "reply.started", reply_id: "r_b" });
+    await wait(15);
+    conn.send({
+      type: "tool.call",
+      call_id: "call_b",
+      name: "log_negotiation_move",
+      arguments: { move_type: "counter_offer", quote: "$108k?", rationale: "Counter." },
+    });
+    await wait(15);
+
+    // First reply gets interrupted -- call_a's result should be dropped, call_b's should survive
+    conn.send({ type: "reply.done", reply_id: "r_a", status: "interrupted" });
+    await wait(25);
+
+    // No results flushed yet (r_b hasn't completed)
+    assert.equal(
+      conn.received.filter((m) => m.type === "tool.result").length,
+      0,
+      "no results should flush before r_b completes",
+    );
+
+    // Second reply completes cleanly
+    conn.send({ type: "reply.done", reply_id: "r_b", status: "completed" });
+    await wait(40);
+
+    const results = conn.received.filter((m) => m.type === "tool.result");
+    assert.equal(results.length, 1, "only call_b's result should be flushed");
+    assert.equal(results[0].call_id, "call_b", "call_a was dropped with r_a's interrupt; call_b survived");
+    assert.equal(events.interrupts, 1, "exactly one interrupt signal sent to browser");
+  });
+});
+
+test("rapid sequential barge-ins do not leave the agent in a frozen state", async () => {
+  await withSession({}, async ({ mock, session, events }) => {
+    const conn = mock.agentConnection();
+
+    // Simulate 5 rapid-fire barge-ins within 90 seconds (worst case from user report)
+    for (let i = 1; i <= 5; i++) {
+      const replyId = `r_rapid_${i}`;
+      conn.send({ type: "reply.started", reply_id: replyId });
+      await wait(10);
+      conn.send({ type: "reply.audio", data: "QUJD" });
+      await wait(10);
+      // User speaks over Alex immediately
+      session.sendAudioChunk(Buffer.alloc(1200, i).toString("base64"));
+      await wait(10);
+      conn.send({ type: "reply.done", reply_id: replyId, status: "interrupted" });
+      await wait(30);
+    }
+
+    assert.equal(events.interrupts, 5, "all 5 interrupts must be signalled to the browser");
+
+    // After all interrupts, the agent leg must still be OPEN and ready to receive
+    assert.ok(
+      session.agentWs && session.agentWs.readyState === session.agentWs.OPEN,
+      "agent WebSocket must still be OPEN after 5 rapid barge-ins",
+    );
+    assert.equal(session.agentReady, true, "agentReady flag must remain true after rapid barge-ins");
+    assert.equal(session.pendingToolResults.size, 0, "no orphaned results should remain in the Map");
+
+    // Confirm the session can still accept a normal reply.done after the storm
+    const replyId = "r_recovery";
+    conn.send({ type: "reply.started", reply_id: replyId });
+    await wait(15);
+    conn.send({
+      type: "tool.call",
+      call_id: "call_recovery",
+      name: "log_negotiation_move",
+      arguments: { move_type: "counter_offer", quote: "$105k final.", rationale: "After barge-in storm." },
+    });
+    await wait(20);
+    conn.send({ type: "reply.done", reply_id: replyId, status: "completed" });
+    await wait(40);
+
+    const results = conn.received.filter((m) => m.type === "tool.result");
+    assert.equal(results.length, 1, "recovery move must produce exactly one tool.result");
+    assert.equal(results[0].call_id, "call_recovery", "recovery tool result must have the right call_id");
   });
 });
 

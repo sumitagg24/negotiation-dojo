@@ -95,7 +95,11 @@ class VoiceAgentSession {
 
     this.agentQueue = [];
     this.sttQueue = [];
-    this.pendingToolResults = [];
+    // Keyed by reply_id: { call_id, result }[]
+    // Using a Map instead of a flat array means a rapid second interruption
+    // only clears results that belong to *that specific reply*, not ones
+    // already queued for the reply that follows it.
+    this.pendingToolResults = new Map(); // replyId -> [{ call_id, result }]
     this.agentPartialByReply = new Map();
 
     // Barge-in state tracking (diagnostic: detect rapid sequential interrupts)
@@ -270,9 +274,6 @@ class VoiceAgentSession {
         });
         break;
 
-      case "reply.started":
-        this.agentPartialByReply.set(event.reply_id, "");
-        break;
 
       case "reply.audio":
         if (event.data) this.onAgentAudio(event.data);
@@ -300,9 +301,14 @@ class VoiceAgentSession {
       case "reply.done": {
         const now = Date.now();
         if (event.status === "interrupted") {
-          // Barge-in: the browser must drop queued audio or it keeps playing over
-          // the candidate. Dropping pending tool results matches the reference
-          // implementation -- the agent has moved on.
+          // Barge-in: drop results that belong ONLY to this interrupted reply.
+          // Using the reply_id key means tool results already queued for the
+          // *next* reply (which may have started before this event arrives)
+          // are left intact and will flush when that reply completes.
+          const replyId = event.reply_id || "__default__";
+          const droppedCount = (this.pendingToolResults.get(replyId) || []).length;
+          this.pendingToolResults.delete(replyId);
+
           this._bargeInCount++;
           const msSinceLast = this._lastBargeInAt ? now - this._lastBargeInAt : null;
           this._lastBargeInAt = now;
@@ -310,19 +316,19 @@ class VoiceAgentSession {
           console.log(
             `[diag:barge-in ${this.sessionId}] interrupt #${this._bargeInCount}` +
             (msSinceLast !== null ? ` (${msSinceLast}ms since last)` : " (first)") +
-            ` pendingToolResults=${this.pendingToolResults.length} reply_id=${event.reply_id || "—"} @ ${new Date().toISOString()}`
+            ` droppedResults=${droppedCount} remainingReplies=${this.pendingToolResults.size}` +
+            ` reply_id=${replyId} @ ${new Date().toISOString()}`
           );
           if (this._bargeInCount >= 3 && msSinceLast !== null && msSinceLast < 8000) {
             console.warn(
-              `[diag:barge-in ${this.sessionId}] RAPID BARGE-IN WARNING: ${this._bargeInCount} interrupts,` +
-              ` last was only ${msSinceLast}ms ago. This can leave agent in a limbo state.`
+              `[diag:barge-in ${this.sessionId}] RAPID BARGE-IN: ${this._bargeInCount} interrupts,` +
+              ` last ${msSinceLast}ms ago. reply-keyed map protects subsequent results.`
             );
           }
-          this.pendingToolResults = [];
           this.onInterrupt();
         } else {
           this._pendingReply = false;
-          this._flushToolResults();
+          this._flushToolResults(event.reply_id || "__default__");
         }
         break;
       }
@@ -331,13 +337,24 @@ class VoiceAgentSession {
         const input = event.arguments && typeof event.arguments === "object" ? event.arguments : {};
         this.onToolCall({ toolName: event.name, input, callId: event.call_id });
         if (event.call_id) {
-          this.pendingToolResults.push({ call_id: event.call_id, result: JSON.stringify({ ok: true }) });
+          // Store under the reply_id of the reply this tool call belongs to,
+          // which is tracked via _currentReplyId set by reply.started.
+          const replyId = this._currentReplyId || "__default__";
+          if (!this.pendingToolResults.has(replyId)) {
+            this.pendingToolResults.set(replyId, []);
+          }
+          this.pendingToolResults.get(replyId).push({
+            call_id: event.call_id,
+            result: JSON.stringify({ ok: true }),
+          });
+          console.log(`[diag:tool-call ${this.sessionId}] queued result for call_id=${event.call_id} reply_id=${replyId}`);
         }
         break;
       }
 
       case "reply.started":
         this._pendingReply = true;
+        this._currentReplyId = event.reply_id || "__default__";
         console.log(`[diag:agent-event ${this.sessionId}] reply.started reply_id=${event.reply_id || "—"} @ ${new Date().toISOString()}`);
         this.agentPartialByReply.set(event.reply_id, "");
         break;
@@ -364,12 +381,27 @@ class VoiceAgentSession {
     }
   }
 
-  _flushToolResults() {
-    if (!this.pendingToolResults.length) return;
-    for (const pending of this.pendingToolResults) {
-      this._sendAgent({ type: "tool.result", call_id: pending.call_id, result: pending.result, is_error: false });
+  /**
+   * Flush tool results for a specific reply, or ALL pending results if no
+   * replyId is given (used by endSession to drain any leftovers).
+   */
+  _flushToolResults(replyId) {
+    if (replyId) {
+      const bucket = this.pendingToolResults.get(replyId);
+      if (!bucket || !bucket.length) return;
+      for (const pending of bucket) {
+        this._sendAgent({ type: "tool.result", call_id: pending.call_id, result: pending.result, is_error: false });
+      }
+      this.pendingToolResults.delete(replyId);
+    } else {
+      // Drain everything (called on endSession)
+      for (const [, bucket] of this.pendingToolResults) {
+        for (const pending of bucket) {
+          this._sendAgent({ type: "tool.result", call_id: pending.call_id, result: pending.result, is_error: false });
+        }
+      }
+      this.pendingToolResults.clear();
     }
-    this.pendingToolResults = [];
   }
 
   _sendAgent(payload) {
