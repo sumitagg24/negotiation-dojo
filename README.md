@@ -150,6 +150,29 @@ Two hosts, because the backend must keep a process alive: the browser holds a lo
 to it for the whole negotiation, and Vercel's serverless functions cannot do that. Frontend on
 Vercel, backend on Render (or Railway / Fly.io).
 
+### Live deployment (this repo)
+
+- **Frontend:** https://negotiation-dojo-one.vercel.app (Vercel, auto-deploys `main`)
+- **Backend:** https://negotiation-dojo-backend.onrender.com (Render free plan, auto-deploys `main`)
+- **Keep-warm:** `.github/workflows/keep-warm.yml` pings `/api/health` every 5 minutes so the free
+  instance never idles into spin-down. Render sleeps an instance after ~15 idle minutes and GitHub
+  delays scheduled runs by a few minutes, so a nominal 10-minute interval was too tight; 5 minutes
+  at an off-peak offset stays safely inside the window. Point it elsewhere via the repo variable
+  `RENDER_HEALTH_URL` (Settings -> Secrets and variables -> Actions -> Variables).
+
+A second, independent pinger covers GitHub's scheduler hiccups — cron-job.org fires on an exact
+interval with no queue delay:
+
+1. Sign up free at [cron-job.org](https://cron-job.org) and confirm the email.
+2. Create a cron job: URL `https://negotiation-dojo-backend.onrender.com/api/health`, method `GET`,
+   schedule **every 10 minutes** (`*/10 * * * *`).
+3. Enable it; "Last execution" should show HTTP 200. Failure notifications are free too.
+
+One manual step on a fresh Render account: paste `ASSEMBLYAI_API_KEY` into the service's
+Environment tab (Render -> negotiation-dojo-backend -> Environment). The key is never committed;
+the service boots and serves `/api/health` without it, and refuses voice sessions until it is set.
+Editing env vars in the dashboard triggers a redeploy automatically.
+
 ### 1. Backend → Render
 
 `render.yaml` in the repo root is a Render Blueprint: root directory, build and start commands,

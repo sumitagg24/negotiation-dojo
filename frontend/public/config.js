@@ -17,9 +17,9 @@
  * at the same host.
  */
 window.__NEGOTIATION_DOJO__ = {
-  // Example: "https://negotiation-dojo-backend.onrender.com"
-  backendUrl: "",
+  // Render backend (auto-deploys from main).
+  backendUrl: "https://negotiation-dojo-backend.onrender.com",
 
-  // Example: "wss://negotiation-dojo-backend.onrender.com"
-  backendWsUrl: "",
+  // Same host over WebSocket.
+  backendWsUrl: "wss://negotiation-dojo-backend.onrender.com",
 };

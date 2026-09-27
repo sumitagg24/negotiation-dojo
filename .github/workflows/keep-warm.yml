@@ -1,0 +1,56 @@
+# Keep-warm pings for the backend on Render's free plan.
+#
+# Free web services spin down after ~15 minutes without requests and take
+# 30-60s to cold start — a cold start in the middle of a live voice demo
+# looks like a hang. This workflow GETs /api/health on a schedule so the
+# instance never idles long enough to sleep.
+#
+# Why every 5 minutes when Render idles at 15? GitHub Actions delays
+# scheduled runs by a few minutes (worst right at the top of the hour), and
+# we deliberately fire at :03/:08/:13/... to dodge the busiest queue window.
+# A nominal 10-minute interval plus delay can drift past the idle limit;
+# 5 minutes at an offset stays safely inside it.
+#
+# Override the target without editing this file by setting the repository
+# variable RENDER_HEALTH_URL (Settings -> Secrets and variables -> Actions ->
+# Variables); it falls back to the production backend below.
+#
+# Free on public repos, and minutes used are tiny (each run is one HTTP GET).
+
+name: Keep backend warm
+
+on:
+  schedule:
+    - cron: "3,8,13,18,23,28,33,38,43,48,53,58 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keep-warm
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Ping /api/health
+        env:
+          HEALTH_URL: ${{ vars.RENDER_HEALTH_URL || 'https://negotiation-dojo-backend.onrender.com/api/health' }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            start=$(date +%s)
+            # --max-time covers the slow path: if the instance DID spin down,
+            # the cold start itself can take 60-90s before answering.
+            if curl -fsS --max-time 90 "$HEALTH_URL" | tee /tmp/health.json; then
+              echo "healthy after $(( $(date +%s) - start ))s (attempt $attempt)"
+              exit 0
+            fi
+            echo "attempt $attempt failed; retrying in 20s"
+            sleep 20
+          done
+          echo "::error::health check failed after 3 attempts: $HEALTH_URL"
+          exit 1
