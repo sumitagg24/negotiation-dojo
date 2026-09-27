@@ -49,3 +49,11 @@ services:
       # AssemblyAI leg if you hit rate or capacity limits during the demo.
       - key: ENABLE_TELL_STT_LEG
         value: "true"
+
+      # Built-in keep-alive cron: pings RENDER_EXTERNAL_URL/api/health every 10 minutes
+      # to prevent Render free tier from idling and spinning down after 15 minutes.
+      - key: KEEP_ALIVE_ENABLED
+        value: "true"
+
+      - key: KEEP_ALIVE_INTERVAL_MINUTES
+        value: "10"

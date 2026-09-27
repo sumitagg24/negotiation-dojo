@@ -6,8 +6,10 @@ import { backendUrl } from "../lib/config.js";
  * Spec C.2 -- one form, four fields, one button.
  * Part F: a failed connection must show an inline error with a Retry button and
  * must NOT transition to the live screen.
+ *
+ * BLACK BOX skin: the setup is the front of a manila case folder, sealed with
+ * hazard tape. Starting a session breaks the seal and opens the recorder.
  */
-
 
 export default function SetupScreen({ onSessionStart }) {
   const [target, setTarget] = useState("");
@@ -79,119 +81,131 @@ export default function SetupScreen({ onSessionStart }) {
 
   return (
     <div className="screen--center">
-      <div className="setup">
-        <div className="setup__intro">
-          <h1 className="setup__title">Practice the conversation that pays you.</h1>
-          <p className="setup__subtitle">
-            You have a verbal offer. Alex Chen, a hiring manager, has a number in mind. Talk him up —
-            then get scored on your moves, your tells, and the money you left behind.
+      <div className="folder">
+        <div className="folder__tab">CASE FILE — NEW RECORDING</div>
+
+        <div className="setup__sheet">
+          <p className="setup__eyebrow">RECORDER &amp; DOSSIER</p>
+          <h1 className="setup__title">
+            Talk the offer up.
+            <br />
+            Then read the report.
+          </h1>
+
+          <p className="setup__orient">
+            Every session is recorded and reviewed like a flight recorder — <strong>your voice, your
+            pace, your pauses</strong>. The report is honest. That is the point.
           </p>
-        </div>
 
-        <form className="panel setup__card" onSubmit={handleSubmit} noValidate>
-          <div className="setup__row">
-            <div className={`field${errors.target ? " field--invalid" : ""}`}>
-              <label className="field__label" htmlFor="target">
-                Target salary
-              </label>
-              <input
-                id="target"
-                className="field__input"
-                type="number"
-                inputMode="numeric"
-                min="1"
-                placeholder="120000"
-                value={target}
-                onChange={(event) => setTarget(event.target.value)}
-                disabled={submitting}
-              />
-              {errors.target ? (
-                <p className="field__error">{errors.target}</p>
-              ) : (
-                <p className="field__hint">What you actually want to walk away with.</p>
-              )}
+          <form onSubmit={handleSubmit} noValidate>
+            <div className="setup__row">
+              <div className={`field${errors.target ? " field--invalid" : ""}`}>
+                <label className="field__label" htmlFor="target">
+                  Target salary
+                </label>
+                <input
+                  id="target"
+                  className="field__input"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  placeholder="120000"
+                  value={target}
+                  onChange={(event) => setTarget(event.target.value)}
+                  disabled={submitting}
+                />
+                {errors.target ? (
+                  <p className="field__error">{errors.target}</p>
+                ) : (
+                  <p className="field__hint">Crew entry. Alex never sees this number.</p>
+                )}
+              </div>
+
+              <div className={`field${errors.walkaway ? " field--invalid" : ""}`}>
+                <label className="field__label" htmlFor="walkaway">
+                  Walk-away number
+                </label>
+                <input
+                  id="walkaway"
+                  className="field__input"
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  placeholder="105000"
+                  value={walkaway}
+                  onChange={(event) => setWalkaway(event.target.value)}
+                  disabled={submitting}
+                />
+                {errors.walkaway ? (
+                  <p className="field__error">{errors.walkaway}</p>
+                ) : (
+                  <p className="field__hint">Below your target. Sealed for the whole session.</p>
+                )}
+              </div>
             </div>
 
-            <div className={`field${errors.walkaway ? " field--invalid" : ""}`}>
-              <label className="field__label" htmlFor="walkaway">
-                Walk-away number
+            <div className="field">
+              <label className="field__label" htmlFor="company">
+                Company name — optional
               </label>
               <input
-                id="walkaway"
+                id="company"
                 className="field__input"
-                type="number"
-                inputMode="numeric"
-                min="1"
-                placeholder="105000"
-                value={walkaway}
-                onChange={(event) => setWalkaway(event.target.value)}
+                type="text"
+                placeholder="Northbeam Analytics (default)"
+                value={companyName}
+                onChange={(event) => setCompanyName(event.target.value)}
                 disabled={submitting}
               />
-              {errors.walkaway ? (
-                <p className="field__error">{errors.walkaway}</p>
-              ) : (
-                <p className="field__hint">Below your target. Alex never sees either number.</p>
-              )}
             </div>
-          </div>
 
-          <div className="field">
-            <label className="field__label" htmlFor="company">
-              Company name <span style={{ color: "var(--text-faint)" }}>(optional)</span>
-            </label>
-            <input
-              id="company"
-              className="field__input"
-              type="text"
-              placeholder="Northbeam Analytics (default)"
-              value={companyName}
-              onChange={(event) => setCompanyName(event.target.value)}
-              disabled={submitting}
-            />
-          </div>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label className="field__label" htmlFor="role">
+                Role title — optional
+              </label>
+              <input
+                id="role"
+                className="field__input"
+                type="text"
+                placeholder="Senior Software Engineer (default)"
+                value={roleTitle}
+                onChange={(event) => setRoleTitle(event.target.value)}
+                disabled={submitting}
+              />
+            </div>
 
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label className="field__label" htmlFor="role">
-              Role title <span style={{ color: "var(--text-faint)" }}>(optional)</span>
-            </label>
-            <input
-              id="role"
-              className="field__input"
-              type="text"
-              placeholder="Senior Software Engineer (default)"
-              value={roleTitle}
-              onChange={(event) => setRoleTitle(event.target.value)}
-              disabled={submitting}
-            />
-          </div>
+            {serverError && (
+              <div className="banner" role="alert">
+                <span>{serverError}</span>
+                <button type="button" className="btn btn--ghost" onClick={startSession} disabled={submitting}>
+                  Retry
+                </button>
+              </div>
+            )}
 
-          {serverError && (
-            <div className="banner banner--error" style={{ marginTop: 20 }}>
-              <span>{serverError}</span>
-              <button type="button" className="btn btn--ghost" onClick={startSession} disabled={submitting}>
-                Retry
+            <div className="setup__actions">
+              <button className="btn btn--block" type="submit" disabled={submitting}>
+                {submitting ? (
+                  <>
+                    <span className="spinner" aria-hidden="true" />
+                    Opening the recorder...
+                  </>
+                ) : (
+                  "Begin recording"
+                )}
               </button>
             </div>
-          )}
 
-          <div className="setup__actions">
-            <button className="btn btn--primary btn--block" type="submit" disabled={submitting}>
-              {submitting ? (
-                <>
-                  <span className="spinner" aria-hidden="true" />
-                  Connecting to Alex...
-                </>
-              ) : (
-                "Start Negotiation"
-              )}
-            </button>
-          </div>
+            <p className="setup__note">
+              You will need a microphone. Headphones are strongly recommended so Alex does not hear
+              himself through your speakers.
+            </p>
+          </form>
+        </div>
 
-          <p className="setup__note">
-            You will need a microphone. Headphones are strongly recommended so Alex does not hear
-            himself through your speakers.
-          </p>
-        </form>
+        <div className="folder__seal tape" aria-hidden={submitting ? "true" : undefined}>
+          <span className="folder__seal-text">RECORDED DATA · REVIEW COPY · RECORDED DATA</span>
+        </div>
       </div>
     </div>
   );

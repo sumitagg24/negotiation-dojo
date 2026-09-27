@@ -154,17 +154,17 @@ Vercel, backend on Render (or Railway / Fly.io).
 
 - **Frontend:** https://negotiation-dojo-one.vercel.app (Vercel, auto-deploys `main`)
 - **Backend:** https://negotiation-dojo-backend.onrender.com (Render free plan, auto-deploys `main`)
-- **Keep-warm:** `.github/workflows/keep-warm.yml` pings `/api/health` every 5 minutes so the free
-  instance never idles into spin-down. Render sleeps an instance after ~15 idle minutes and GitHub
-  delays scheduled runs by a few minutes, so a nominal 10-minute interval was too tight; 5 minutes
-  at an off-peak offset stays safely inside the window. Point it elsewhere via the repo variable
-  `RENDER_HEALTH_URL` (Settings -> Secrets and variables -> Actions -> Variables).
+- **Keep-warm (Built-in + External):**
+  1. **Built-in Backend Cron:** The backend includes a self-pinging background service (`src/cron/keepAlive.js`). When deployed on Render, it automatically detects `RENDER_EXTERNAL_URL` and sends an HTTP GET request to its own `/api/health` every 10 minutes. Because traffic arrives from the public internet, Render's reverse proxy resets its 15-minute inactivity timer, preventing free tier sleep and eliminating 30-60s cold starts.
+  2. **WebSocket Heartbeat:** Render terminates idle WebSockets after 100 seconds of silence. The backend runs a 30-second ping/pong heartbeat to keep long pauses during voice negotiations from dropping.
+  3. **GitHub Actions Workflow:** `.github/workflows/keep-warm.yml` pings `/api/health` externally on a schedule as an extra layer of defense.
+  4. **CLI Manual Ping:** Run `npm run ping` in `backend/` to test or verify keep-alive status at any time.
 
-A second, independent pinger covers GitHub's scheduler hiccups — cron-job.org fires on an exact
+A third, independent pinger covers external monitoring — cron-job.org fires on an exact
 interval with no queue delay:
 
 1. Sign up free at [cron-job.org](https://cron-job.org) and confirm the email.
-2. Create a cron job: URL `https://negotiation-dojo-backend.onrender.com/api/health`, method `GET`,
+2. Create a cron job: URL `https://<your-backend>.onrender.com/api/health`, method `GET`,
    schedule **every 10 minutes** (`*/10 * * * *`).
 3. Enable it; "Last execution" should show HTTP 200. Failure notifications are free too.
 

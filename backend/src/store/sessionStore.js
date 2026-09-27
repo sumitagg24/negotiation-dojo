@@ -17,6 +17,8 @@ const sessions = new Map();
 const STORE_PATH = process.env.SESSION_STORE_PATH || "./data/sessions.json";
 let persistInFlight = false;
 
+let persistPending = false;
+
 function generateId(prefix = "") {
   const id = crypto.randomBytes(8).toString("hex");
   return prefix ? `${prefix}_${id}` : id;
@@ -25,15 +27,30 @@ function generateId(prefix = "") {
 /**
  * Async, non-blocking mirror to disk. Deliberately not debounced: the whole
  * point of this file is that the most recent write survives a crash.
+ * If a write is already in flight, flag a pending write so rapid sequential writes
+ * (e.g. moves and tells occurring close together) are never silently dropped.
  */
 function persist() {
-  if (persistInFlight) return;
+  if (persistInFlight) {
+    persistPending = true;
+    return;
+  }
   persistInFlight = true;
+  persistPending = false;
   const payload = JSON.stringify({ sessions: Array.from(sessions.entries()) }, null, 0);
-  fs.mkdir(path.dirname(STORE_PATH), { recursive: true }, () => {
+  const dir = path.dirname(STORE_PATH);
+
+  fs.mkdir(dir, { recursive: true }, (mkdirErr) => {
+    if (mkdirErr) {
+      persistInFlight = false;
+      console.error("[sessionStore] mkdir failed:", mkdirErr.message);
+      if (persistPending) persist();
+      return;
+    }
     fs.writeFile(STORE_PATH, payload, (err) => {
       persistInFlight = false;
       if (err) console.error("[sessionStore] persist failed:", err.message);
+      if (persistPending) persist();
     });
   });
 }

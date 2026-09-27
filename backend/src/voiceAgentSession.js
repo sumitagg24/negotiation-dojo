@@ -298,8 +298,13 @@ class VoiceAgentSession {
 
   _sendAgent(payload) {
     if (this.agentWs && this.agentWs.readyState === WebSocket.OPEN) {
-      this.agentWs.send(JSON.stringify(payload));
-      return true;
+      try {
+        this.agentWs.send(JSON.stringify(payload));
+        return true;
+      } catch (err) {
+        console.warn(`[voiceAgentSession ${this.sessionId}] sendAgent error: ${err.message}`);
+        return false;
+      }
     }
     return false;
   }

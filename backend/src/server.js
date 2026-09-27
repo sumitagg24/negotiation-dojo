@@ -20,6 +20,12 @@ const { VoiceAgentSession } = require("./voiceAgentSession");
 const { handleLogNegotiationMove } = require("./tools/logNegotiationMove");
 const { detectTells, computeUtteranceStats } = require("./scoring/tellDetection");
 const { scoreSession, createLlmClient } = require("./scoring/scoreSession");
+const {
+  startKeepAlive,
+  stopKeepAlive,
+  getKeepAliveStatus,
+  triggerKeepAlivePing,
+} = require("./cron/keepAlive");
 
 // An empty or non-numeric PORT (some environments export PORT=0) would otherwise
 // silently bind an ephemeral port and make the frontend fail to connect.
@@ -54,7 +60,7 @@ function buildOriginMatcher(raw) {
     }
     const wildcard = entry.match(/^(https?:\/\/)\*\.(.+)$/);
     if (wildcard) wildcards.push({ scheme: wildcard[1], suffix: wildcard[2] });
-    else exact.add(entry);
+    else exact.add(entry.replace(/\/+$/, ""));
   }
 
   return {
@@ -62,10 +68,11 @@ function buildOriginMatcher(raw) {
     test(origin) {
       if (!origin) return true; // curl, Render health checks, same-origin requests
       if (allowAll) return true;
-      if (exact.has(origin)) return true;
+      const cleanOrigin = origin.replace(/\/+$/, "");
+      if (exact.has(cleanOrigin)) return true;
       return wildcards.some(({ scheme, suffix }) => {
-        if (!origin.startsWith(scheme)) return false;
-        const host = origin.slice(scheme.length);
+        if (!cleanOrigin.startsWith(scheme)) return false;
+        const host = cleanOrigin.slice(scheme.length);
         return host === suffix || host.endsWith(`.${suffix}`);
       });
     },
@@ -78,6 +85,8 @@ const originMatcher = buildOriginMatcher(CORS_ORIGIN);
 const IDLE_ABANDON_MS = 2 * 60 * 1000;
 /** Cap on agent audio buffered while the browser is still connecting. */
 const MAX_PENDING_AGENT_AUDIO = 600;
+/** Heartbeat interval to prevent Render proxy from dropping idle WebSockets (Render drops at 100s) */
+const WS_HEARTBEAT_INTERVAL_MS = 30000;
 
 const app = express();
 app.use(
@@ -148,15 +157,34 @@ function createRuntime(sessionId, scenarioConfig) {
     voiceAgent: null,
   };
 
+  // If browser starts session but abandons before attaching WebSocket, stop billing
+  runtime.idleTimer = setTimeout(() => {
+    if (runtime.ended || runtime.client) return;
+    console.log(`[server] session ${sessionId} never attached; ending voice agent`);
+    try {
+      runtime.voiceAgent?.endSession();
+    } catch {
+      /* ignore */
+    }
+  }, IDLE_ABANDON_MS);
+
   const push = (message) => {
     if (runtime.client && runtime.client.readyState === WebSocket.OPEN) {
-      runtime.client.send(JSON.stringify(message));
+      try {
+        runtime.client.send(JSON.stringify(message));
+      } catch (err) {
+        console.warn(`[server ${sessionId}] ws push error: ${err.message}`);
+      }
     }
   };
 
   const pushAgentAudio = (base64Chunk) => {
     if (runtime.client && runtime.client.readyState === WebSocket.OPEN) {
-      runtime.client.send(JSON.stringify({ type: "agent_audio_chunk", payload: base64Chunk }));
+      try {
+        runtime.client.send(JSON.stringify({ type: "agent_audio_chunk", payload: base64Chunk }));
+      } catch (err) {
+        console.warn(`[server ${sessionId}] ws audio push error: ${err.message}`);
+      }
     } else {
       // The greeting is spoken the moment the agent session is ready, which is
       // before the browser's WebSocket attaches. Buffer it so the opening offer
@@ -223,7 +251,11 @@ function handleUserUtteranceForTells(runtime, transcript) {
     const stored = sessionStore.appendTell(sessionId, { ...tell, quote: tell.quote || transcript.text });
     const detail = Object.fromEntries(Object.entries(stored).filter(([k]) => !["type", "quote", "id", "timestamp"].includes(k)));
     if (runtime.client && runtime.client.readyState === WebSocket.OPEN) {
-      runtime.client.send(JSON.stringify({ type: "tell_detected", tellType: stored.type, quote: stored.quote, detail }));
+      try {
+        runtime.client.send(JSON.stringify({ type: "tell_detected", tellType: stored.type, quote: stored.quote, detail }));
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -236,12 +268,22 @@ function handleUserUtteranceForTells(runtime, transcript) {
  */
 function finishSession(sessionId) {
   const runtime = runtimes.get(sessionId);
-  if (!runtime) return Promise.resolve(sessionStore.getScorecard(sessionId));
+  if (!runtime) {
+    const existing = sessionStore.getScorecard(sessionId);
+    if (existing) return Promise.resolve(existing);
+    if (sessionStore.getSession(sessionId)) {
+      return scoreSession(sessionId, sessionStore, llmClient);
+    }
+    return Promise.resolve(null);
+  }
   if (runtime.scorecard) return Promise.resolve(runtime.scorecard);
   if (runtime.scoringPromise) return runtime.scoringPromise;
 
   runtime.ended = true;
-  if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
+  if (runtime.idleTimer) {
+    clearTimeout(runtime.idleTimer);
+    runtime.idleTimer = null;
+  }
 
   runtime.scoringPromise = (async () => {
     try {
@@ -254,16 +296,24 @@ function finishSession(sessionId) {
       const scorecard = await scoreSession(sessionId, sessionStore, llmClient);
       runtime.scorecard = scorecard;
       if (runtime.client && runtime.client.readyState === WebSocket.OPEN) {
-        runtime.client.send(JSON.stringify({ type: "scorecard_ready", scorecard }));
+        try {
+          runtime.client.send(JSON.stringify({ type: "scorecard_ready", scorecard }));
+        } catch {
+          /* ignore */
+        }
       }
       return scorecard;
     } catch (err) {
       // Allow a retry rather than caching the failure.
       runtime.scoringPromise = null;
       if (runtime.client && runtime.client.readyState === WebSocket.OPEN) {
-        runtime.client.send(
-          JSON.stringify({ type: "error", code: "SCORING_FAILED", message: `Scoring failed: ${err.message}` }),
-        );
+        try {
+          runtime.client.send(
+            JSON.stringify({ type: "error", code: "SCORING_FAILED", message: `Scoring failed: ${err.message}` }),
+          );
+        } catch {
+          /* ignore */
+        }
       }
       throw err;
     }
@@ -277,63 +327,86 @@ function finishSession(sessionId) {
 // ---------------------------------------------------------------------------
 
 app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok" });
+  res.json({
+    status: "ok",
+    uptime: Math.round(process.uptime() * 10) / 10,
+    timestamp: new Date().toISOString(),
+    keepAlive: getKeepAliveStatus(),
+    activeSessions: runtimes.size,
+  });
 });
 
-app.post("/api/session/start", async (req, res) => {
-  const body = req.body || {};
-  const targetSalary = Number(body.candidateTargetSalary);
-  const walkaway = Number(body.candidateWalkaway);
+app.post("/api/keep-alive/ping", async (_req, res) => {
+  const result = await triggerKeepAlivePing({ isRetry: false });
+  res.json(result);
+});
 
-  if (!Number.isFinite(targetSalary) || targetSalary <= 0) {
-    return res.status(400).json({ error: "invalid_target_salary", message: "Target salary must be a positive number." });
-  }
-  if (!Number.isFinite(walkaway) || walkaway <= 0) {
-    return res.status(400).json({ error: "invalid_walkaway", message: "Walk-away number must be a positive number." });
-  }
-  if (walkaway >= targetSalary) {
-    return res.status(400).json({
-      error: "walkaway_not_below_target",
-      message: "Your walk-away number must be below your target salary.",
-    });
-  }
+app.get("/api/keep-alive", (_req, res) => {
+  res.json(getKeepAliveStatus());
+});
 
-  const scenarioConfig = {
-    candidateTargetSalary: targetSalary,
-    candidateWalkaway: walkaway,
-    companyName: (body.companyName || "").trim() || "Northbeam Analytics",
-    roleTitle: (body.roleTitle || "").trim() || "Senior Software Engineer",
-    ...deriveScenarioNumbers(targetSalary),
-  };
-
-  const sessionId = sessionStore.createSession(scenarioConfig);
-  const runtime = createRuntime(sessionId, scenarioConfig);
-
+app.post("/api/session/start", async (req, res, next) => {
   try {
-    // Await the handshake so a bad key or a dead upstream surfaces on the setup
-    // screen instead of transitioning the user into a silently broken live view.
-    await runtime.voiceAgent.ready;
+    const body = req.body || {};
+    const targetSalary = Number(body.candidateTargetSalary);
+    const walkaway = Number(body.candidateWalkaway);
+
+    if (!Number.isFinite(targetSalary) || targetSalary <= 0) {
+      return res.status(400).json({ error: "invalid_target_salary", message: "Target salary must be a positive number." });
+    }
+    if (!Number.isFinite(walkaway) || walkaway <= 0) {
+      return res.status(400).json({ error: "invalid_walkaway", message: "Walk-away number must be a positive number." });
+    }
+    if (walkaway >= targetSalary) {
+      return res.status(400).json({
+        error: "walkaway_not_below_target",
+        message: "Your walk-away number must be below your target salary.",
+      });
+    }
+
+    const scenarioConfig = {
+      candidateTargetSalary: targetSalary,
+      candidateWalkaway: walkaway,
+      companyName: (body.companyName || "").trim() || "Northbeam Analytics",
+      roleTitle: (body.roleTitle || "").trim() || "Senior Software Engineer",
+      ...deriveScenarioNumbers(targetSalary),
+    };
+
+    const sessionId = sessionStore.createSession(scenarioConfig);
+    const runtime = createRuntime(sessionId, scenarioConfig);
+
+    try {
+      // Await the handshake so a bad key or a dead upstream surfaces on the setup
+      // screen instead of transitioning the user into a silently broken live view.
+      await runtime.voiceAgent.ready;
+    } catch (err) {
+      runtime.voiceAgent.endSession();
+      if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
+      runtimes.delete(sessionId);
+      return res.status(502).json({
+        error: "aai_connection_failed",
+        message: humanReadableConnectionError(err),
+      });
+    }
+
+    res.json({ sessionId, wsPath: `/ws/session/${sessionId}` });
   } catch (err) {
-    runtime.voiceAgent.endSession();
-    runtimes.delete(sessionId);
-    return res.status(502).json({
-      error: "aai_connection_failed",
-      message: humanReadableConnectionError(err),
-    });
+    next(err);
   }
-
-  res.json({ sessionId, wsPath: `/ws/session/${sessionId}` });
 });
 
-app.post("/api/session/:id/end", async (req, res) => {
-  const { id } = req.params;
-  if (!sessionStore.getSession(id)) return res.status(404).json({ error: "unknown_session" });
-
+app.post("/api/session/:id/end", async (req, res, next) => {
   try {
+    const { id } = req.params;
+    if (!sessionStore.getSession(id)) return res.status(404).json({ error: "unknown_session" });
+
     const scorecard = await finishSession(id);
+    if (!scorecard) {
+      return res.status(500).json({ error: "scoring_failed", message: "Scorecard could not be generated." });
+    }
     res.json({ scorecard });
   } catch (err) {
-    res.status(500).json({ error: "scoring_failed", message: err.message });
+    next(err);
   }
 });
 
@@ -341,6 +414,16 @@ app.get("/api/session/:id/scorecard", (req, res) => {
   const scorecard = sessionStore.getScorecard(req.params.id);
   if (!scorecard) return res.status(404).json({ error: "not_ready" });
   res.json({ scorecard });
+});
+
+// Express error handling middleware
+app.use((err, _req, res, _next) => {
+  console.error("[server] Unhandled request error:", err);
+  if (res.headersSent) return;
+  res.status(500).json({
+    error: "internal_server_error",
+    message: err.message || "An unexpected error occurred.",
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -381,13 +464,25 @@ function attachClient(runtime, ws) {
     }
   }
   runtime.client = ws;
+  ws.isAlive = true;
+
+  ws.on("pong", () => {
+    ws.isAlive = true;
+  });
+
   if (runtime.idleTimer) {
     clearTimeout(runtime.idleTimer);
     runtime.idleTimer = null;
   }
 
   const send = (message) => {
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
+    if (ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(JSON.stringify(message));
+      } catch {
+        /* ignore */
+      }
+    }
   };
 
   send({ type: "session_ready", sessionId: runtime.sessionId });
@@ -408,6 +503,9 @@ function attachClient(runtime, ws) {
     }
 
     switch (msg.type) {
+      case "ping":
+        return send({ type: "pong", timestamp: Date.now() });
+
       case "audio_chunk":
         runtime.voiceAgent.sendAudioChunk(msg.payload);
         break;
@@ -445,6 +543,26 @@ function attachClient(runtime, ws) {
   });
 }
 
+// Keep-alive heartbeat across all active WebSocket connections (prevents Render proxy 100s drop)
+const wsHeartbeatInterval = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) {
+      console.log("[server] terminating inactive websocket client");
+      return ws.terminate();
+    }
+    ws.isAlive = false;
+    try {
+      ws.ping();
+    } catch {
+      /* ignore */
+    }
+  });
+}, WS_HEARTBEAT_INTERVAL_MS);
+
+if (typeof wsHeartbeatInterval.unref === "function") {
+  wsHeartbeatInterval.unref();
+}
+
 // ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
@@ -456,14 +574,22 @@ server.listen(PORT, () => {
   if (!process.env.ASSEMBLYAI_API_KEY) {
     console.warn("WARNING: ASSEMBLYAI_API_KEY is not set. Session start will fail until it is.");
   }
-  console.log(`  LLM for scorecard narratives: ${llmClient.model} (${llmClient.isConfigured() ? "configured" : "NOT configured - using built-in narrative"})`);
+  console.log(
+    `  LLM for scorecard narratives: ${llmClient.model} (${llmClient.isConfigured() ? "configured" : "NOT configured - using built-in narrative"})`,
+  );
+  startKeepAlive();
 });
 
 function shutdown() {
+  console.log("[server] Shutting down gracefully...");
+  if (wsHeartbeatInterval) clearInterval(wsHeartbeatInterval);
+  stopKeepAlive();
+
   // Leave no billable sessions behind.
   for (const runtime of runtimes.values()) {
+    if (runtime.idleTimer) clearTimeout(runtime.idleTimer);
     try {
-      runtime.voiceAgent.endSession();
+      runtime.voiceAgent?.endSession();
     } catch {
       /* ignore */
     }
@@ -474,5 +600,13 @@ function shutdown() {
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+
+process.on("unhandledRejection", (reason) => {
+  console.error("[process] Unhandled Promise Rejection:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("[process] Uncaught Exception:", err);
+});
 
 module.exports = { app, server, deriveScenarioNumbers, finishSession };

@@ -6,26 +6,85 @@
  * Part F: empty logs are first class. went_well and tells may be empty and
  * biggest_leverage_loss may be null -- all three render a real empty state
  * rather than a blank card.
+ *
+ * BLACK BOX skin: the scorecard is the dossier pulled from the recorder --
+ * a typed flight-record review with parameter rulers, an exceedance table,
+ * a grease-pencil circled probable cause, and rubber stamps. Orange is used
+ * only as stamp FILL; stamp text/borders are Ribbon Ink (contrast on paper).
  */
 
-const TELL_LABELS = {
-  hesitation: "Hesitation",
-  retraction: "Retraction",
-  pace_spike: "Pace spike",
-  mumbled_number: "Mumbled number",
+const TELL_PARAMS = {
+  hesitation: "PAUSE DURATION",
+  retraction: "UTTERANCE REVISION",
+  pace_spike: "SPEECH RATE",
+  mumbled_number: "SPEECH CLARITY",
 };
+
+const PARAM_DEFS = [
+  { key: "anchorQuality", label: "ANCHOR QUALITY", invert: false },
+  { key: "reciprocityRatio", label: "RECIPROCITY", invert: false },
+  { key: "tellDensity", label: "TELL DISCIPLINE", invert: true },
+  { key: "finalOutcomeRatio", label: "FINAL OUTCOME", invert: false },
+];
+
+const CELLS = 12;
+
+function clamp01(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.min(1, value));
+}
+
+/** Wraps spoken numbers in a wavy red underline, like an investigator's pen. */
+function MarkedQuote({ text }) {
+  if (!text) return null;
+  const parts = String(text).split(/(\$?\d[\d,]*(?:\.\d+)?k?)/gi);
+  return (
+    <span className="xtable__quote">
+      {parts.map((part, index) =>
+        /^\$?\d[\d,]*(?:\.\d+)?k?$/i.test(part) ? <em key={index}>{part}</em> : part,
+      )}
+    </span>
+  );
+}
+
+function ParameterRuler({ label, ratio, reached }) {
+  const filled = reached ? Math.round((ratio ?? 0) * CELLS) : 0;
+  return (
+    <div className="param">
+      <div className="param__label">
+        <span>{label}</span>
+        <span className="param__value">
+          {reached ? `${Math.round((ratio ?? 0) * 100)}` : "—"}
+        </span>
+      </div>
+      <div className="param__ruler" role="img" aria-label={`${label}: ${reached ? Math.round((ratio ?? 0) * 100) + " percent" : "not reached"}`}>
+        {Array.from({ length: CELLS }, (_, index) => (
+          <span
+            key={index}
+            className={`param__cell${index < filled ? " param__cell--fill" : " param__cell--void"}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function ScorecardScreen({ scorecard, onTryAgain }) {
   if (!scorecard) {
     return (
-      <div className="scorecard">
-        <div className="scorecard__empty">
-          No scorecard came back for that session. Start a new negotiation to get a full report.
-        </div>
-        <div className="scorecard__footer">
-          <button className="btn btn--primary" type="button" onClick={onTryAgain}>
-            Try Again
-          </button>
+      <div className="dossier-wrap">
+        <div className="dossier">
+          <div className="dossier__tab">FLIGHT RECORD REVIEW</div>
+          <div className="dossier__sheet">
+            <div className="dossier__empty">
+              No report came back for that session. The recorder holds nothing without a session.
+            </div>
+          </div>
+          <div className="dossier__footer">
+            <button className="btn" type="button" onClick={onTryAgain}>
+              New recording
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -35,94 +94,199 @@ export default function ScorecardScreen({ scorecard, onTryAgain }) {
   const tells = Array.isArray(scorecard.tells) ? scorecard.tells : [];
   const loss = scorecard.biggest_leverage_loss || null;
   const score = scorecard.final_score;
+  const subs = scorecard.sub_scores || {};
+  const outcomeReached = typeof subs.finalOutcomeRatio === "number" && Number.isFinite(subs.finalOutcomeRatio);
+  const reviewed = new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "2-digit" }).toUpperCase();
 
   return (
-    <div className="scorecard">
-      {/* 1. Score header ---------------------------------------------------- */}
-      <div className="score-head">
-        <div>
-          <span className="score-number">{score}</span>
-          <span className="score-number__outof"> / 100</span>
-        </div>
-        <div className="score-label">{scorecard.score_label}</div>
-        <div className="score-meta">
-          {scorecard.narrative_source === "fallback"
-            ? "Deterministic score · coaching notes generated from the weighted sub-scores"
-            : "Deterministic score · coaching notes written from your session log"}
-        </div>
-      </div>
+    <div className="dossier-wrap">
+      <div className="dossier">
+        <div className="dossier__tab">FLIGHT RECORD REVIEW · {reviewed}</div>
 
-      {/* 2. What you did well ---------------------------------------------- */}
-      <section className="section">
-        <h2 className="section__title">What you did well</h2>
-        <p className="section__hint">Moments where you held your ground.</p>
-        {wentWell.length === 0 ? (
-          <div className="scorecard__empty">
-            Nothing here yet — you did not get far enough into the conversation for a move to land.
-          </div>
-        ) : (
-          wentWell.map((entry, index) => (
-            <div className="quote-card" key={`well-${index}`}>
-              <p className="quote-card__quote">&ldquo;{entry.quote}&rdquo;</p>
-              <p className="quote-card__note">{entry.note}</p>
+        <div className="dossier__seal tape ink-in" aria-hidden="true">
+          <span className="folder__seal-text">RECORDED DATA · REVIEW COPY · RECORDED DATA</span>
+        </div>
+
+        <div className="dossier__sheet">
+          {/* 1. Document head + verdict ----------------------------------- */}
+          <header className="doc-head">
+            <div>
+              <p className="doc-head__eyebrow">NEGOTIATION DOJO · RECORDED SESSION REVIEW</p>
+              <h1 className="doc-head__title">Operator Review</h1>
+              <p className="doc-head__meta">
+                {scorecard.narrative_source === "fallback"
+                  ? "Deterministic scoring · template findings (LLM narrative unavailable)."
+                  : "Deterministic scoring · findings written from your session log."}
+              </p>
             </div>
-          ))
-        )}
-      </section>
+          </header>
 
-      {/* 3. Where you gave away leverage ----------------------------------- */}
-      <section className="section">
-        <h2 className="section__title">Where you gave away leverage</h2>
-        <p className="section__hint">The single most expensive moment of the call.</p>
-        {loss ? (
-          <div className="loss-card">
-            <div className="loss-card__label">Biggest leverage loss</div>
-            <p className="quote-card__quote">&ldquo;{loss.quote}&rdquo;</p>
-            <p className="quote-card__note">{loss.note}</p>
-          </div>
-        ) : (
-          <div className="scorecard__empty">
-            Not enough happened in this session to find a leverage loss — try engaging more next time.
-          </div>
-        )}
-      </section>
-
-      {/* 4. Your tells ------------------------------------------------------ */}
-      <section className="section">
-        <h2 className="section__title">Your tells</h2>
-        <p className="section__hint">
-          Small signals in how you said it. A hiring manager reads these in real time.
-        </p>
-        {tells.length === 0 ? (
-          <div className="scorecard__empty">
-            No tells detected. You delivered your numbers calmly — that is exactly the goal.
-          </div>
-        ) : (
-          tells.map((tell, index) => (
-            <div className="tell-card" key={`tell-${index}`}>
-              <div className="tell-card__type">{TELL_LABELS[tell.type] || tell.type}</div>
-              {tell.quote && <p className="quote-card__quote">&ldquo;{tell.quote}&rdquo;</p>}
-              <p className="quote-card__note">{tell.note}</p>
+          <div className="verdict">
+            <div className="verdict__score ink-in ink-in--1">
+              {score}
+              <small> /100</small>
             </div>
-          ))
-        )}
-      </section>
+            <div className="verdict__lines ink-in ink-in--2">
+              <p className="verdict__line">
+                <strong>READS:</strong> {scorecard.score_label}
+              </p>
+              <p className="verdict__line">
+                <strong>METHOD:</strong> parameter review against the operator&rsquo;s own session
+                baseline — not a fixed standard.
+              </p>
+              {outcomeReached ? (
+                <p className="verdict__line">
+                  <strong>OUTCOME:</strong> settled at {Math.round(subs.finalOutcomeRatio * 100)}% of
+                  the operator&rsquo;s target.
+                </p>
+              ) : (
+                <p className="verdict__line">
+                  <strong>OUTCOME:</strong> no settlement reached on the record.
+                </p>
+              )}
+            </div>
+            <div className="ink-in ink-in--3">
+              {outcomeReached ? (
+                <span className="stamp stamp--small stamp-in">
+                  OUTCOME {Math.round(subs.finalOutcomeRatio * 100)}%
+                </span>
+              ) : (
+                <span className="stamp stamp--small stamp-in">OUTCOME NOT REACHED</span>
+              )}
+            </div>
+          </div>
 
-      {/* 5. Next time ------------------------------------------------------- */}
-      <section className="section">
-        <h2 className="section__title">Next time</h2>
-        <p className="section__hint">One thing to change. Nothing else.</p>
-        <div className="next-time">
-          <div className="mono-label">The takeaway</div>
-          <p className="next-time__text">{scorecard.next_time_instruction}</p>
+          {/* 2. Parameter review ------------------------------------------ */}
+          <section className="doc-section">
+            <div className="doc-section__head">
+              <h2 className="doc-section__title">Parameter review</h2>
+              <span className="doc-section__note">pen-plotted against session baseline</span>
+            </div>
+            <div className="param-grid">
+              {PARAM_DEFS.map((def) => {
+                const raw = subs[def.key];
+                const reached = raw !== null && raw !== undefined && raw !== "" ? true : false;
+                const ratio = clamp01(def.invert ? (typeof raw === "number" ? 1 - raw : 0) : raw);
+                return (
+                  <ParameterRuler
+                    key={def.key}
+                    label={def.label}
+                    ratio={ratio}
+                    reached={reached && ratio !== null}
+                  />
+                );
+              })}
+            </div>
+          </section>
+
+          {/* 3. What you did well ----------------------------------------- */}
+          <section className="doc-section">
+            <div className="doc-section__head">
+              <h2 className="doc-section__title">Satisfactory performance</h2>
+              <span className="doc-section__note">moments where you held your ground</span>
+            </div>
+            {wentWell.length === 0 ? (
+              <div className="dossier__empty">
+                Nothing logged. The conversation did not get far enough for a move to land.
+              </div>
+            ) : (
+              wentWell.map((entry, index) => (
+                <div className="sat-row ink-in" key={`well-${index}`}>
+                  <div className="sat-row__body">
+                    <p className="sat-row__quote">
+                      &ldquo;<MarkedQuote text={entry.quote} />&rdquo;
+                    </p>
+                    <p className="sat-row__note">{entry.note}</p>
+                  </div>
+                  <span className="stamp stamp--small">SATISFACTORY</span>
+                </div>
+              ))
+            )}
+          </section>
+
+          {/* 4. Parameter exceedances (tells) ------------------------------ */}
+          <section className="doc-section">
+            <div className="doc-section__head">
+              <h2 className="doc-section__title">Parameter exceedances</h2>
+              <span className="doc-section__note">small signals in how you said it</span>
+            </div>
+            {tells.length === 0 ? (
+              <div className="dossier__empty">
+                No exceedances recorded. The operator&rsquo;s delivery stayed inside baseline on every
+                parameter — that is exactly the goal.
+              </div>
+            ) : (
+              <table className="xtable">
+                <thead>
+                  <tr>
+                    <th>Ex</th>
+                    <th>Parameter</th>
+                    <th>As spoken</th>
+                    <th>Finding</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tells.map((tell, index) => (
+                    <tr key={`tell-${index}`}>
+                      <td className="xtable__ex">{String.fromCharCode(65 + index)}</td>
+                      <td className="xtable__ex">{TELL_PARAMS[tell.type] || (tell.type || "").toUpperCase()}</td>
+                      <td>
+                        {tell.quote ? (
+                          <MarkedQuote text={tell.quote} />
+                        ) : (
+                          <span className="doc-section__note">—</span>
+                        )}
+                      </td>
+                      <td className="xtable__note">{tell.note}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
+
+          {/* 5. Probable cause --------------------------------------------- */}
+          <section className="doc-section">
+            <div className="doc-section__head">
+              <h2 className="doc-section__title">Probable cause</h2>
+              <span className="doc-section__note">the single most expensive moment of the call</span>
+            </div>
+            {loss ? (
+              <div className="cause ink-in ink-in--3">
+                <p className="cause__quote">
+                  &ldquo;<MarkedQuote text={loss.quote} />&rdquo;
+                </p>
+                <p className="cause__factor">
+                  <strong>FINDING</strong> {loss.note}
+                </p>
+              </div>
+            ) : (
+              <div className="dossier__empty">
+                Not enough happened in this session to locate a leverage loss. Engage more next time
+                and the recorder will find one.
+              </div>
+            )}
+          </section>
+
+          {/* 6. Recommendation --------------------------------------------- */}
+          <section className="doc-section">
+            <div className="doc-section__head">
+              <h2 className="doc-section__title">Recommendation</h2>
+              <span className="doc-section__note">one change. nothing else.</span>
+            </div>
+            <div className="reco">
+              <span className="reco__docket">A-26-{String(Math.max(0, score)).padStart(2, "0")}</span>
+              <p className="reco__text ink-in ink-in--4">{scorecard.next_time_instruction}</p>
+            </div>
+          </section>
         </div>
-      </section>
 
-      {/* 6. Try again ------------------------------------------------------- */}
-      <div className="scorecard__footer">
-        <button className="btn btn--primary" type="button" onClick={onTryAgain}>
-          Try Again
-        </button>
+        <div className="dossier__footer">
+          <span className="mono-label">End of report · recorder retains full audio parameters</span>
+          <button className="btn" type="button" onClick={onTryAgain}>
+            New recording
+          </button>
+        </div>
       </div>
     </div>
   );

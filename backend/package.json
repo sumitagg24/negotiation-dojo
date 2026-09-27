@@ -11,7 +11,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "ping": "node scripts/ping-health.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
