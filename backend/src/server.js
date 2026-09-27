@@ -410,6 +410,12 @@ app.post("/api/session/:id/end", async (req, res, next) => {
   }
 });
 
+app.get("/api/session/:id", (req, res) => {
+  const session = sessionStore.getSession(req.params.id);
+  if (!session) return res.status(404).json({ error: "unknown_session" });
+  res.json({ session });
+});
+
 app.get("/api/session/:id/scorecard", (req, res) => {
   const scorecard = sessionStore.getScorecard(req.params.id);
   if (!scorecard) return res.status(404).json({ error: "not_ready" });
