@@ -98,6 +98,49 @@ class VoiceAgentSession {
     this.pendingToolResults = [];
     this.agentPartialByReply = new Map();
 
+    // Barge-in state tracking (diagnostic: detect rapid sequential interrupts)
+    this._bargeInCount = 0;
+    this._lastBargeInAt = 0;
+    this._pendingReply = false;
+
+    // Application-level keepalive timers for both AAI legs.
+    // AssemblyAI's proxy (and Cloudflare/Render in front of us) will drop a
+    // WebSocket connection that sends NO frames for ~30-60 seconds. Audio
+    // itself keeps the agent leg alive while the user is speaking, but if
+    // both sides are silent for more than ~25s (e.g. the candidate is reading
+    // the offer and not talking) we need to send an explicit keepalive.
+    this._agentKeepaliveInterval = null;
+    this._sttKeepaliveInterval = null;
+
+    const KEEPALIVE_MS = 25000;
+    this._agentKeepaliveInterval = setInterval(() => {
+      if (this.ended) return;
+      if (this.agentWs && this.agentWs.readyState === WebSocket.OPEN) {
+        try {
+          // The Voice Agent API ignores unknown types; a ping frame keeps the
+          // TCP connection alive without affecting the conversation state.
+          this.agentWs.ping();
+          console.log(`[diag:agent-keepalive ${this.sessionId}] sent WS ping to AAI agent leg @ ${new Date().toISOString()}`);
+        } catch (err) {
+          console.warn(`[diag:agent-keepalive ${this.sessionId}] ping failed: ${err.message}`);
+        }
+      } else {
+        console.warn(`[diag:agent-keepalive ${this.sessionId}] agent leg not OPEN during keepalive check (state: ${this.agentWs?.readyState})`);
+      }
+    }, KEEPALIVE_MS);
+
+    this._sttKeepaliveInterval = setInterval(() => {
+      if (this.ended || this.sttDegraded) return;
+      if (this.sttWs && this.sttWs.readyState === WebSocket.OPEN) {
+        try {
+          this.sttWs.ping();
+          console.log(`[diag:stt-keepalive ${this.sessionId}] sent WS ping to AAI STT leg @ ${new Date().toISOString()}`);
+        } catch (err) {
+          console.warn(`[diag:stt-keepalive ${this.sessionId}] ping failed: ${err.message}`);
+        }
+      }
+    }, KEEPALIVE_MS);
+
     /** Resolves on session.ready, rejects on pre-ready failure. */
     this.ready = new Promise((resolve, reject) => {
       this._resolveReady = resolve;
@@ -152,6 +195,7 @@ class VoiceAgentSession {
     this.agentWs = ws;
 
     ws.on("open", () => {
+      console.log(`[diag:agent-open ${this.sessionId}] Voice Agent WS opened to ${this.agentUrl} @ ${new Date().toISOString()}`);
       this._sendAgent({
         type: "session.update",
         session: {
@@ -171,13 +215,20 @@ class VoiceAgentSession {
 
     ws.on("message", (raw) => this._handleAgentEvent(raw));
 
+    ws.on("pong", () => {
+      console.log(`[diag:agent-pong ${this.sessionId}] received pong from AAI agent leg @ ${new Date().toISOString()}`);
+    });
+
     ws.on("error", (err) => {
       const message = `Voice agent connection error: ${err.message}`;
+      console.error(`[diag:agent-error ${this.sessionId}] ${message} @ ${new Date().toISOString()}`);
       this._emitError("AAI_CONNECTION_LOST", message);
       this._failReady(err);
     });
 
-    ws.on("close", (code) => {
+    ws.on("close", (code, reason) => {
+      const reasonStr = reason ? reason.toString() : "(no reason)";
+      console.warn(`[diag:agent-close ${this.sessionId}] agent leg closed: code=${code} reason=${reasonStr} ended=${this.ended} agentReady=${this.agentReady} @ ${new Date().toISOString()}`);
       if (this.ended) return;
       this.agentReady = false;
       this._emitError("AAI_CONNECTION_LOST", `Voice agent connection closed unexpectedly (code ${code}).`);
@@ -246,17 +297,35 @@ class VoiceAgentSession {
         });
         break;
 
-      case "reply.done":
+      case "reply.done": {
+        const now = Date.now();
         if (event.status === "interrupted") {
           // Barge-in: the browser must drop queued audio or it keeps playing over
           // the candidate. Dropping pending tool results matches the reference
           // implementation -- the agent has moved on.
+          this._bargeInCount++;
+          const msSinceLast = this._lastBargeInAt ? now - this._lastBargeInAt : null;
+          this._lastBargeInAt = now;
+          this._pendingReply = false;
+          console.log(
+            `[diag:barge-in ${this.sessionId}] interrupt #${this._bargeInCount}` +
+            (msSinceLast !== null ? ` (${msSinceLast}ms since last)` : " (first)") +
+            ` pendingToolResults=${this.pendingToolResults.length} reply_id=${event.reply_id || "—"} @ ${new Date().toISOString()}`
+          );
+          if (this._bargeInCount >= 3 && msSinceLast !== null && msSinceLast < 8000) {
+            console.warn(
+              `[diag:barge-in ${this.sessionId}] RAPID BARGE-IN WARNING: ${this._bargeInCount} interrupts,` +
+              ` last was only ${msSinceLast}ms ago. This can leave agent in a limbo state.`
+            );
+          }
           this.pendingToolResults = [];
           this.onInterrupt();
         } else {
+          this._pendingReply = false;
           this._flushToolResults();
         }
         break;
+      }
 
       case "tool.call": {
         const input = event.arguments && typeof event.arguments === "object" ? event.arguments : {};
@@ -267,7 +336,14 @@ class VoiceAgentSession {
         break;
       }
 
+      case "reply.started":
+        this._pendingReply = true;
+        console.log(`[diag:agent-event ${this.sessionId}] reply.started reply_id=${event.reply_id || "—"} @ ${new Date().toISOString()}`);
+        this.agentPartialByReply.set(event.reply_id, "");
+        break;
+
       case "session.ended":
+        console.log(`[diag:agent-event ${this.sessionId}] session.ended received @ ${new Date().toISOString()}`);
         this.ended = true;
         break;
 
@@ -380,11 +456,24 @@ class VoiceAgentSession {
       }
     });
 
-    ws.on("error", (err) => this._degradeStt(err.message));
+    ws.on("open", () => {
+      console.log(`[diag:stt-open ${this.sessionId}] Streaming STT WS opened @ ${new Date().toISOString()}`);
+    });
 
-    ws.on("close", () => {
+    ws.on("pong", () => {
+      console.log(`[diag:stt-pong ${this.sessionId}] received pong from STT leg @ ${new Date().toISOString()}`);
+    });
+
+    ws.on("error", (err) => {
+      console.error(`[diag:stt-error ${this.sessionId}] ${err.message} @ ${new Date().toISOString()}`);
+      this._degradeStt(err.message);
+    });
+
+    ws.on("close", (code, reason) => {
+      const reasonStr = reason ? reason.toString() : "(no reason)";
+      console.warn(`[diag:stt-close ${this.sessionId}] STT leg closed: code=${code} reason=${reasonStr} ended=${this.ended} sttReady=${this.sttReady} @ ${new Date().toISOString()}`);
       this.sttReady = false;
-      if (!this.ended) this._degradeStt("connection closed");
+      if (!this.ended) this._degradeStt(`connection closed (code ${code})`);
     });
   }
 
@@ -452,10 +541,13 @@ class VoiceAgentSession {
 
   endSession() {
     if (this.ended) return;
+    console.log(`[diag:teardown ${this.sessionId}] endSession called: agentReady=${this.agentReady} sttReady=${this.sttReady} bargeInCount=${this._bargeInCount} @ ${new Date().toISOString()}`);
     this.ended = true;
     this.agentReady = false;
     this.sttReady = false;
     clearTimeout(this._readyTimer);
+    if (this._agentKeepaliveInterval) { clearInterval(this._agentKeepaliveInterval); this._agentKeepaliveInterval = null; }
+    if (this._sttKeepaliveInterval) { clearInterval(this._sttKeepaliveInterval); this._sttKeepaliveInterval = null; }
 
     this._flushToolResults();
 

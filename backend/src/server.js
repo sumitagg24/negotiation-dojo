@@ -468,6 +468,10 @@ function attachClient(runtime, ws) {
 
   ws.on("pong", () => {
     ws.isAlive = true;
+    // pong from frontend resets the 3-cycle miss counter (already done by messages,
+    // but RFC 6455 pong fires separately)
+    ws.missedPings = 0;
+    console.log(`[diag:fe-pong ${runtime.sessionId}] received RFC 6455 pong from browser @ ${new Date().toISOString()}`);
   });
 
   if (runtime.idleTimer) {
@@ -506,6 +510,7 @@ function attachClient(runtime, ws) {
 
     switch (msg.type) {
       case "ping":
+        console.log(`[diag:fe-ping ${runtime.sessionId}] app-level ping from browser @ ${new Date().toISOString()}`);
         return send({ type: "pong", timestamp: Date.now() });
 
       case "audio_chunk":
@@ -523,7 +528,9 @@ function attachClient(runtime, ws) {
     }
   });
 
-  ws.on("close", () => {
+  ws.on("close", (code, reason) => {
+    const reasonStr = reason ? reason.toString() : "(no reason)";
+    console.log(`[diag:fe-close ${runtime.sessionId}] browser WS closed: code=${code} reason=${reasonStr} sessionEnded=${runtime.ended} @ ${new Date().toISOString()}`);
     if (runtime.client === ws) runtime.client = null;
     if (runtime.ended) return;
 
@@ -540,7 +547,8 @@ function attachClient(runtime, ws) {
     }, IDLE_ABANDON_MS);
   });
 
-  ws.on("error", () => {
+  ws.on("error", (err) => {
+    console.warn(`[diag:fe-error ${runtime.sessionId}] browser WS error: ${err.message} @ ${new Date().toISOString()}`);
     /* handled by close */
   });
 }
@@ -551,15 +559,17 @@ const wsHeartbeatInterval = setInterval(() => {
     if (ws.isAlive === false) {
       ws.missedPings = (ws.missedPings || 0) + 1;
       if (ws.missedPings >= 3) {
-        console.log("[server] terminating inactive websocket client after 3 missed cycles");
+        console.log(`[diag:heartbeat] terminating browser WS after 3 missed ping cycles (no pong/message) @ ${new Date().toISOString()}`);
         return ws.terminate();
       }
+      console.log(`[diag:heartbeat] browser WS missed ping #${ws.missedPings} (isAlive=false) @ ${new Date().toISOString()}`);
     } else {
       ws.missedPings = 0;
     }
     ws.isAlive = false;
     try {
       ws.ping();
+      // console.log(`[diag:heartbeat] sent RFC 6455 ping to browser @ ${new Date().toISOString()}`);
     } catch {
       /* ignore */
     }
