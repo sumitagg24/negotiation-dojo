@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Negotiation Dojo — Hackathon Cover</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@600;700;800&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --charcoal: #161310;
+      --charcoal-card: #1c1814;
+      --orange: #ff4f00;
+      --manila: #dccba4;
+      --manila-edge: #b9a377;
+      --paper: #f2eddf;
+      --ink: #26251f;
+      --foil: #a8a79f;
+      --rail-ink: #cfc8b8;
+      --rail-dim: #8f887a;
+      --font-stamp: "Saira Condensed", "Arial Narrow", sans-serif;
+      --font-type: "Courier Prime", "Courier New", monospace;
+      --font-machine: "IBM Plex Mono", "Menlo", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: var(--charcoal);
+      color: var(--paper);
+      display: flex;
+    }
+
+    /* Left 40%: 768px wide */
+    .left-panel {
+      width: 768px;
+      height: 1080px;
+      background: var(--charcoal);
+      padding: 92px 76px 80px 88px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      border-right: 3px solid var(--orange);
+      flex-shrink: 0;
+    }
+
+    .panel-top {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .badge-bar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 38px;
+    }
+
+    .stamp-badge {
+      display: inline-block;
+      font-family: var(--font-stamp);
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 13.5px;
+      letter-spacing: 0.16em;
+      color: var(--ink);
+      background: var(--orange);
+      border: 2px solid var(--ink);
+      padding: 4px 12px 3px;
+      transform: rotate(-1deg);
+    }
+
+    .meta-code {
+      font-family: var(--font-machine);
+      font-size: 11.5px;
+      letter-spacing: 0.22em;
+      color: var(--rail-dim);
+      text-transform: uppercase;
+    }
+
+    /* Main Title */
+    .hero-title {
+      font-family: var(--font-stamp);
+      font-size: 98px;
+      font-weight: 800;
+      line-height: 0.88;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: var(--paper);
+      margin-bottom: 24px;
+    }
+
+    .hero-title span {
+      color: var(--manila);
+    }
+
+    /* Subtitle */
+    .hero-subtitle {
+      font-family: var(--font-type);
+      font-size: 26px;
+      line-height: 1.35;
+      color: var(--manila);
+      margin-bottom: 32px;
+      max-width: 580px;
+    }
+
+    /* Accent divider rule */
+    .accent-rule {
+      width: 68px;
+      height: 4px;
+      background: var(--orange);
+      margin-bottom: 44px;
+    }
+
+    /* Technical callout block (factual, no invented stats) */
+    .feature-list {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      margin-top: 6px;
+    }
+
+    .feature-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      border-left: 2px solid rgba(220, 203, 164, 0.25);
+      padding-left: 16px;
+    }
+
+    .feature-label {
+      font-family: var(--font-machine);
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      color: var(--orange);
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .feature-desc {
+      font-family: var(--font-machine);
+      font-size: 14.5px;
+      color: var(--rail-ink);
+      line-height: 1.35;
+    }
+
+    /* Bottom-left line */
+    .panel-bottom {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: var(--font-machine);
+      font-size: 14px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--rail-dim);
+    }
+
+    .panel-bottom-dot {
+      width: 10px;
+      height: 10px;
+      background: var(--orange);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .panel-bottom-text {
+      color: var(--foil);
+      font-weight: 500;
+    }
+
+    /* Right 60%: 1152px wide */
+    .right-panel {
+      width: 1152px;
+      height: 1080px;
+      background: var(--charcoal);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .right-screenshot {
+      width: 1152px;
+      height: 1080px;
+      object-fit: cover;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="left-panel">
+    <div class="panel-top">
+      <div class="badge-bar">
+        <span class="stamp-badge">FLIGHT RECORDER</span>
+        <span class="meta-code">RECORDED TELEMETRY · 2026</span>
+      </div>
+
+      <h1 class="hero-title">NEGOTIATION<br><span>DOJO</span></h1>
+
+      <p class="hero-subtitle">Hear the hesitation in your voice.</p>
+
+      <div class="accent-rule"></div>
+
+      <div class="feature-list">
+        <div class="feature-item">
+          <div class="feature-label">VOICE ARCHITECTURE</div>
+          <div class="feature-desc">Dual-Leg Voice Agent & Streaming STT v3</div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-label">ACOUSTIC TELEMETRY</div>
+          <div class="feature-desc">Sub-second tells: hesitations, pace spikes & mumbled numbers</div>
+        </div>
+        <div class="feature-item">
+          <div class="feature-label">EVALUATION</div>
+          <div class="feature-desc">100% deterministic formulaic scoring</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-bottom">
+      <span class="panel-bottom-dot"></span>
+      <span class="panel-bottom-text">Built on AssemblyAI Voice Agent API</span>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <img class="right-screenshot" src="scorecard_cover_snap.png" alt="Negotiation Dojo Scorecard Review">
+  </div>
+</body>
+</html>

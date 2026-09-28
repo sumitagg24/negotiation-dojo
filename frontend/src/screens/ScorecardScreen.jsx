@@ -75,6 +75,7 @@ function ParameterRuler({ label, ratio, reached }) {
 export default function ScorecardScreen({ scorecard, sessionId, onTryAgain }) {
   const [copied, setCopied] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
+  const isCover = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("cover") === "1";
 
   const handleCopy = useCallback(() => {
     copyScorecardText(scorecard, sessionId).catch(() => {});
@@ -131,9 +132,13 @@ export default function ScorecardScreen({ scorecard, sessionId, onTryAgain }) {
           {/* 1. Document head + verdict ----------------------------------- */}
           <header className="doc-head">
             <div>
-              <p className="doc-head__eyebrow">NEGOTIATION DOJO · RECORDED SESSION REVIEW</p>
+              <p className="doc-head__eyebrow">
+                NEGOTIATION DOJO · RECORDED SESSION REVIEW
+                {scorecard.company ? ` · ${scorecard.company.toUpperCase()}` : ""}
+              </p>
               <h1 className="doc-head__title">Operator Review</h1>
               <p className="doc-head__meta">
+                {scorecard.company ? <span>Counterparty: <strong>{scorecard.company}</strong> · </span> : null}
                 {scorecard.narrative_source === "fallback"
                   ? "Deterministic scoring · template findings (LLM narrative unavailable)."
                   : "Deterministic scoring · findings written from your session log."}
@@ -268,55 +273,61 @@ export default function ScorecardScreen({ scorecard, sessionId, onTryAgain }) {
           </section>
 
           {/* 5. Probable cause --------------------------------------------- */}
-          <section className="doc-section">
-            <div className="doc-section__head">
-              <h2 className="doc-section__title">Probable cause</h2>
-              <span className="doc-section__note">the single most expensive moment of the call</span>
-            </div>
-            {loss ? (
-              <div className="cause ink-in ink-in--3">
-                <p className="cause__quote">
-                  &ldquo;<MarkedQuote text={loss.quote} />&rdquo;
-                </p>
-                <p className="cause__factor">
-                  <strong>FINDING:</strong> {loss.note}
-                </p>
-              </div>
-            ) : (
-              <div className="dossier__empty">
-                Not enough happened in this session to locate a leverage loss. Engage more next time
-                and the recorder will find one.
-              </div>
-            )}
-          </section>
+          {!isCover && (
+            <>
+              <section className="doc-section">
+                <div className="doc-section__head">
+                  <h2 className="doc-section__title">Probable cause</h2>
+                  <span className="doc-section__note">the single most expensive moment of the call</span>
+                </div>
+                {loss ? (
+                  <div className="cause ink-in ink-in--3">
+                    <p className="cause__quote">
+                      &ldquo;<MarkedQuote text={loss.quote} />&rdquo;
+                    </p>
+                    <p className="cause__factor">
+                      <strong>FINDING:</strong> {loss.note}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="dossier__empty">
+                    Not enough happened in this session to locate a leverage loss. Engage more next time
+                    and the recorder will find one.
+                  </div>
+                )}
+              </section>
 
-          {/* 6. Recommendation --------------------------------------------- */}
-          <section className="doc-section">
-            <div className="doc-section__head">
-              <h2 className="doc-section__title">Recommendation</h2>
-              <span className="doc-section__note">one change. nothing else.</span>
-            </div>
-            <div className="reco">
-              <span className="reco__docket">A-26-{String(Math.max(0, score)).padStart(2, "0")}</span>
-              <p className="reco__text ink-in ink-in--4">{scorecard.next_time_instruction}</p>
-            </div>
-          </section>
+              {/* 6. Recommendation --------------------------------------------- */}
+              <section className="doc-section">
+                <div className="doc-section__head">
+                  <h2 className="doc-section__title">Recommendation</h2>
+                  <span className="doc-section__note">one change. nothing else.</span>
+                </div>
+                <div className="reco">
+                  <span className="reco__docket">A-26-{String(Math.max(0, score)).padStart(2, "0")}</span>
+                  <p className="reco__text ink-in ink-in--4">{scorecard.next_time_instruction}</p>
+                </div>
+              </section>
+            </>
+          )}
         </div>
 
-        <div className="dossier__footer">
-          <span className="mono-label">End of report · recorder retains full audio parameters</span>
-          <div className="dossier__footer-actions">
-            <button className="btn btn--ghost" type="button" onClick={handleCopy}>
-              {copied ? "Copied to clipboard!" : "Copy report"}
-            </button>
-            <button className="btn btn--ghost" type="button" onClick={handleDownload}>
-              {downloaded ? "Report downloaded!" : "Download report"}
-            </button>
-            <button className="btn" type="button" onClick={onTryAgain}>
-              New recording
-            </button>
+        {!isCover && (
+          <div className="dossier__footer">
+            <span className="mono-label">End of report · recorder retains full audio parameters</span>
+            <div className="dossier__footer-actions">
+              <button className="btn btn--ghost" type="button" onClick={handleCopy}>
+                {copied ? "Copied to clipboard!" : "Copy report"}
+              </button>
+              <button className="btn btn--ghost" type="button" onClick={handleDownload}>
+                {downloaded ? "Report downloaded!" : "Download report"}
+              </button>
+              <button className="btn" type="button" onClick={onTryAgain}>
+                New recording
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ import { copyScorecardText, downloadScorecardReport } from "./lib/scorecardCopy.
  * material worlds never mix on one screen.
  */
 const SAMPLE_SCORECARD = {
+  company: "Northbeam Analytics",
   final_score: 82,
   score_label: "COMPETENT NEGOTIATION",
   sub_scores: {
